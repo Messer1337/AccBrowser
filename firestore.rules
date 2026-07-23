@@ -42,7 +42,10 @@ service cloud.firestore {
     // here from the Firebase Console.
     match /authorizedUsers/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
-      allow write: if false;
+      // Self-registration must stay impossible (see note above) — but an admin revoking
+      // an ex-teammate's access needs to be able to delete their record.
+      allow create, update: if false;
+      allow delete: if isAdmin();
     }
 
     match /auditLogs/{logId} {
