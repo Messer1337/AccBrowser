@@ -73,6 +73,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+    app.setName('OASIS Browser');
     initFirebase();
     const userDataPath = app.getPath('userData');
     authManager = new AuthManager(userDataPath);
