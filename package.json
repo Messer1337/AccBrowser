@@ -23,7 +23,8 @@
       "provider": "github",
       "owner": "Messer1337",
       "repo": "AccBrowser",
-      "private": true
+      "private": true,
+      "releaseType": "release"
     },
     "releaseInfo": {
       "releaseNotesFile": "RELEASE_NOTES_CURRENT.md"
