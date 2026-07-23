@@ -363,6 +363,15 @@ app.whenReady().then(async () => {
         };
     });
 
+    ipcMain.handle('update-firebase-config', async (event, config) => {
+        const currentUser = authManager.getCurrentUser();
+        if (!currentUser || currentUser.role !== 'admin') {
+            throw new Error('Тільки адміністратор може змінювати налаштування Firebase.');
+        }
+        initFirebase(config);
+        return { success: true, isConfigured: isFirebaseConfigured() };
+    });
+
     ipcMain.handle('delete-user', async (event, username) => {
         const currentUser = authManager.getCurrentUser();
         if (!currentUser || currentUser.role !== 'admin') {
