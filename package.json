@@ -5,6 +5,9 @@
   "author": "OASIS Team",
   "main": "src/main/index.js",
   "scripts": {
+    "clean": "rm -rf dist hosting_updates",
+    "prebuild": "npm run clean",
+    "prerelease": "npm run clean",
     "start": "electron .",
     "build": "electron-builder --mac --win",
     "build:mac": "electron-builder --mac",
