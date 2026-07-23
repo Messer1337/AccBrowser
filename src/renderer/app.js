@@ -726,33 +726,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   const changelogModalOk = document.getElementById('changelog-modal-ok');
   const changelogContainer = document.getElementById('changelog-container');
 
-  function renderChangelogMarkdown(md) {
-    const lines = escapeHtml(md).split('\n');
+  // CHANGELOG.md is plain Ukrainian text now, no markdown — just "Версія X.Y.Z (дата)"
+  // lines followed by plain paragraphs, so rendering it is a straight escape + wrap.
+  function renderChangelogText(text) {
+    const lines = escapeHtml(text).split('\n');
     let html = '';
-    let inList = false;
-    const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
-
     for (const line of lines) {
-      if (/^## \[/.test(line)) {
-        closeList();
-        html += `<div class="changelog-version">${line.replace(/^## /, '')}</div>`;
-      } else if (/^### /.test(line)) {
-        closeList();
-        html += `<h4>${line.replace(/^### /, '')}</h4>`;
-      } else if (/^- /.test(line)) {
-        if (!inList) { html += '<ul>'; inList = true; }
-        let item = line.replace(/^- /, '')
-          .replace(/`([^`]+)`/g, '<code>$1</code>')
-          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-        html += `<li>${item}</li>`;
-      } else if (line.trim() === '' || /^# /.test(line)) {
-        closeList();
+      const trimmed = line.trim();
+      if (trimmed === '') continue;
+      if (/^Версія /.test(trimmed)) {
+        html += `<div class="changelog-version">${trimmed}</div>`;
       } else {
-        closeList();
-        html += `<p style="font-size:12px; color:var(--text-muted); margin:4px 0;">${line}</p>`;
+        html += `<p style="font-size:12px; color:var(--text-muted); margin:4px 0 14px; line-height:1.6;">${trimmed}</p>`;
       }
     }
-    closeList();
     return html;
   }
 
@@ -764,7 +751,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         changelogContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">Історія версій недоступна.</div>';
         return;
       }
-      changelogContainer.innerHTML = renderChangelogMarkdown(res.content);
+      changelogContainer.innerHTML = renderChangelogText(res.content);
     } catch (err) {
       changelogContainer.innerHTML = `<div style="color:#ef4444; padding:10px;">❌ ${escapeHtml(err.message)}</div>`;
     }

@@ -13,9 +13,9 @@ function main() {
     const { version } = require(path.join(ROOT, 'package.json'));
     const changelog = fs.readFileSync(CHANGELOG_PATH, 'utf8');
 
-    // Matches "## [1.1.0] - 2026-07-23" up to the next "## [" heading (or end of file)
+    // Matches "Версія 1.1.0 (23.07.2026)" up to the next "Версія " line (or end of file)
     const sectionRegex = new RegExp(
-        `^## \\[${version.replace(/\./g, '\\.')}\\][^\\n]*\\n([\\s\\S]*?)(?=^## \\[|\\Z)`,
+        `^Версія ${version.replace(/\./g, '\\.')}[^\\n]*\\n([\\s\\S]*?)(?=^Версія |\\Z)`,
         'm'
     );
     const match = changelog.match(sectionRegex);

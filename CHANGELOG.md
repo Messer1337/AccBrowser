@@ -1,53 +1,27 @@
-# Changelog
+Історія оновлень OASIS Browser
 
-All notable changes to OASIS Browser are documented here.
-Format follows [Keep a Changelog](https://keepachangelog.com/), versions follow [SemVer](https://semver.org/).
+Як рахуємо версії: остання цифра (наприклад 1.6.1) — дрібні правки і виправлення багів, робимо їх потрошки. Середня цифра (1.6.0) — помітна нова функція. Перша цифра — великі зміни в застосунку.
 
-## [1.6.0] - 2026-07-23
-### Added
-- Explicit App Version Badge (e.g., `v1.6.0`) displayed in the sidebar footer.
-- Manual Update Button `🔄 Перевірити оновлення` allowing any user to trigger live GitHub Releases check.
-- Interactive Update Progress Modal showing release detection, download percentage bar, and instant relaunch button (`autoUpdater.quitAndInstall(false, true)`).
+Версія 1.6.1 (23.07.2026)
+Головне виправлення: синхронізація між різними комп'ютерами не працювала. Причина була в тому, що кожен комп'ютер сам собі придумував окремий пароль для входу в хмару, і тільки перший комп'ютер, який хоч раз заходив під певним логіном, міг підключитися до спільної бази — усі інші назавжди отримували відмову, навіть після перезапуску чи оновлення. Тепер цей хмарний пароль рахується однаково на будь-якому комп'ютері, виходячи з того самого пароля, яким ви заходите в застосунок. Також довиправили видалення користувача з хмари — раніше воно не спрацьовувало через відсутні частини коду, хоч і виглядало так, ніби працює. І прибрали залежність застосунку від пакунків, які випадково підтягувались через інші бібліотеки, а не були прописані як власні.
 
-## [1.5.0] - 2026-07-23
-### Changed
-- Switched auto-update publishing back to GitHub Releases on the public repository `Messer1337/AccBrowser` for instant 100% reliable auto-updates across all macOS and Windows devices without CORS or host restrictions.
+Версія 1.6.0 (23.07.2026)
+Тепер видно номер версії застосунку прямо в бічній панелі. Додали кнопку "Перевірити оновлення" і вікно з прогресом завантаження оновлення та швидким перезапуском.
 
-## [1.4.0] - 2026-07-23
-### Fixed
-- Guaranteed Cloud Firestore upload for all newly created profiles. Previously, newly created empty-cookie profiles were skipping Firestore setDoc because unchanged cookie hash checks bypassed metadata sync.
+Версія 1.5.0 (23.07.2026)
+Оновлення застосунку тепер роздаються через GitHub, а не через Firebase Hosting — так надійніше.
 
-## [1.3.0] - 2026-07-23
-### Added
-- Team User Accounts & Permissions Multi-PC Cloud Sync (`teamUsers` Cloud Firestore collection). Creating/editing team accounts on Mac #1 now instantly syncs to Mac #2 Admin panel.
+Версія 1.4.0 (23.07.2026)
+Виправили баг, через який деякі щойно створені профілі не одразу потрапляли у хмару.
 
-## [1.2.0] - 2026-07-23
-### Added
-- Real live network proxy pinging via HTTP/SOCKS5 tunnels (`ip-api.com`), fetching real IP, country, and timezone.
-- Instant cloud authorization revocation on user deletion (`deleteDoc` on `authorizedUsers/{uid}`).
-- Dynamic ESM imports for proxy agents (`https-proxy-agent`, `socks-proxy-agent`).
-- Modern 3D Glassmorphic macOS squircle icon and `app.setName('OASIS Browser')` Dock title.
+Версія 1.3.0 (23.07.2026)
+Список користувачів команди і їхні права доступу тепер теж зберігаються в хмарі, щоб бути однаковими на всіх комп'ютерах.
 
-## [1.1.0] - 2026-07-23
-### Added
-- Firebase Authentication tied to local accounts, so Firestore security rules can verify who's asking instead of trusting any request that has the app's config.
-- `authorizedUsers` Firestore collection gating profile/audit-log access — admin-provisioned, not self-service.
-- Encrypted profile backup: export/import all profiles to a password-protected `.oasisbak` file (AES-256-GCM).
-- Per-profile timezone field, applied via `page.emulateTimezone()` to stay consistent with the proxy's geography.
-- WebRTC leak protection (`disable_non_proxied_udp`) and a hardened proxy bypass list whenever a proxy is configured.
-- User management panel (create/edit/delete team accounts and per-profile access) and a team audit log (who launched/edited/deleted what, when).
-- One-click connection health check with a trust-score style report per profile.
-- Auto-update support via `electron-updater`.
+Версія 1.2.0 (23.07.2026)
+Додали справжню перевірку проксі: застосунок сам підключається через нього і показує реальну IP-адресу, країну та часовий пояс проксі-сервера. Видалення користувача тепер намагається одразу забрати його доступ до хмари (остаточно запрацювало в 1.6.1, див. вище). Новий значок застосунку.
 
-### Changed
-- Passwords are now hashed (previously stored in plaintext); default admin/admin forces a password change on first login.
-- Cookie sync interval reduced from 15s to 5s (safe now that unchanged cookies are deduped before hitting Firestore).
-- Cookies synced to Firestore are trimmed of known tracking cookies and capped in size to stay under the 1MB document limit.
+Версія 1.1.0 (23.07.2026)
+Додали справжній вхід через Firebase, щоб хмара бачила, хто саме заходить, а не довіряла будь-кому, у кого є ключ застосунку. Додали зашифрований паролем бекап профілів. Додали поле часового поясу для профілю. Додали захист від витоку реальної IP-адреси через WebRTC. Додали керування користувачами команди і журнал дій ("хто що робив"). Додали перевірку з'єднання профілю одним кліком. Додали автоматичне оновлення застосунку. Паролі користувачів тепер зберігаються не відкритим текстом, а хешовані. Дефолтний пароль admin/admin тепер треба обов'язково змінити при першому вході.
 
-### Fixed
-- `process.env.USER` (undefined on Windows) no longer breaks cross-device sync — replaced with a generated per-install device ID.
-- Profile IDs are validated against path traversal before being used to build filesystem paths.
-
-## [1.0.0] - 2026-07-22
-### Added
-- Initial release: isolated Chrome profiles per account, proxy + fingerprint injection per profile, Firestore-based cookie sync across teammates, local-only fallback when cloud sync isn't configured.
+Версія 1.0.0 (22.07.2026)
+Перший робочий варіант: окремий ізольований профіль Chrome для кожного акаунта, свій проксі й унікальний відбиток браузера на кожен профіль, автоматична синхронізація кукі між колегами через Firestore, і локальний режим роботи, якщо хмара не налаштована.

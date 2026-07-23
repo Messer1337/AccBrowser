@@ -1,15 +1,22 @@
 const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
-const { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
+const { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, updatePassword } = require('firebase/auth');
 const { doc, deleteDoc, setDoc, getDocs, collection } = require('firebase/firestore');
 const { getAuthInstance, getSecondaryAuthInstance, getDb, isFirebaseConfigured } = require('../config/firebase');
 
-// Firebase Auth identity is deliberately decoupled from the user's chosen local password:
-// it's a random secret generated once and stored locally, so changing the local password
-// (self-service or admin reset) never desyncs the cloud credential.
+// The Firebase Auth password is derived (not random) from the user's local passwordHash,
+// so ANY machine that knows the correct real password computes the exact same Firebase
+// credential — this is what lets the same team account log in from multiple computers.
+// (An earlier version generated a random secret per machine instead; since that secret was
+// never synced, only the first machine that ever logged in could authenticate — every other
+// computer silently failed forever. That's why cross-device sync looked broken.)
 function toFirebaseEmail(username) {
     return `${encodeURIComponent(username.toLowerCase())}@oasis-browser.local`;
+}
+
+function deriveFirebaseAuthPassword(passwordHash) {
+    return crypto.createHash('sha256').update(`${passwordHash}:oasis-firebase-pepper`).digest('hex');
 }
 
 class AuthManager {
@@ -77,7 +84,7 @@ class AuthManager {
                         const { passwordHash, firebaseAuthSecret, ...safeUser } = found;
                         this.currentUser = safeUser;
                         console.log(`[AuthManager] Restoring active session for user: ${this.currentUser.username}`);
-                        await this.syncFirebaseAuth(found.username);
+                        await this.syncFirebaseAuth(found.username, found.passwordHash);
                     }
                 }
             }
@@ -104,44 +111,34 @@ class AuthManager {
         }
     }
 
-    // Firebase Auth password is independent of the human-chosen local password (see toFirebaseEmail above).
-    // Generated once, persisted locally, never rotated on local password change.
-    getOrCreateFirebaseSecret(username) {
-        const users = this.getUsers();
-        const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
-        if (!user) return null;
-        if (user.firebaseAuthSecret) return user.firebaseAuthSecret;
-
-        user.firebaseAuthSecret = crypto.randomBytes(32).toString('hex');
-        fs.writeJsonSync(this.usersFile, users, { spaces: 2 });
-        return user.firebaseAuthSecret;
-    }
-
     // Best-effort: signs into (or provisions) this user's Firebase Auth identity so that
     // Firestore security rules can see a real request.auth.uid for them. Never blocks or
     // fails local login — if Firebase is unreachable/misconfigured, the app just falls back
     // to local-only storage as before.
-    async syncFirebaseAuth(username) {
-        if (!isFirebaseConfigured()) return;
+    async syncFirebaseAuth(username, passwordHash) {
+        if (!isFirebaseConfigured() || !passwordHash) return;
         const auth = getAuthInstance();
         const secondaryAuth = getSecondaryAuthInstance();
         if (!auth || !secondaryAuth) return;
 
-        const secret = this.getOrCreateFirebaseSecret(username);
-        if (!secret) return;
         const email = toFirebaseEmail(username);
+        const derivedPassword = deriveFirebaseAuthPassword(passwordHash);
         let credential = null;
 
         try {
-            credential = await signInWithEmailAndPassword(auth, email, secret);
+            credential = await signInWithEmailAndPassword(auth, email, derivedPassword);
         } catch (err) {
             if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
                 try {
-                    await createUserWithEmailAndPassword(secondaryAuth, email, secret);
+                    await createUserWithEmailAndPassword(secondaryAuth, email, derivedPassword);
                     await signOut(secondaryAuth);
-                    credential = await signInWithEmailAndPassword(auth, email, secret);
+                    credential = await signInWithEmailAndPassword(auth, email, derivedPassword);
                 } catch (provisionErr) {
-                    console.warn('[AuthManager] Firebase Auth provisioning failed:', provisionErr.message);
+                    if (provisionErr.code === 'auth/email-already-in-use') {
+                        console.warn(`[AuthManager] Firebase Auth account for '${username}' exists with a different password (likely a leftover account from before this fix, or the local password was changed on another device). Delete the account "${email}" in Firebase Console -> Authentication and log in again to recreate it.`);
+                    } else {
+                        console.warn('[AuthManager] Firebase Auth provisioning failed:', provisionErr.message);
+                    }
                 }
             } else {
                 console.warn('[AuthManager] Firebase Auth sign-in failed:', err.message);
@@ -201,19 +198,34 @@ class AuthManager {
         return true;
     }
 
-    changePassword(username, newPassword) {
+    async changePassword(username, newPassword) {
         const users = this.getUsers();
         const user = users.find(u => u.username === username);
         if (!user) return { success: false, message: 'Користувача не знайдено' };
 
-        user.passwordHash = this.hashPassword(newPassword);
+        const newHash = this.hashPassword(newPassword);
+        user.passwordHash = newHash;
         user.mustChangePassword = false;
         delete user.password;
-        
+
         fs.writeJsonSync(this.usersFile, users, { spaces: 2 });
 
         if (this.currentUser && this.currentUser.username === username) {
             this.currentUser.mustChangePassword = false;
+        }
+
+        // The Firebase Auth password is derived from passwordHash, so it must be rotated
+        // to match — we can only do this for our own currently-signed-in session (Firebase
+        // Auth has no client-side way to change another user's password without them).
+        if (isFirebaseConfigured() && this.currentUser && this.currentUser.username === username) {
+            const auth = getAuthInstance();
+            if (auth && auth.currentUser) {
+                try {
+                    await updatePassword(auth.currentUser, deriveFirebaseAuthPassword(newHash));
+                } catch (err) {
+                    console.warn(`[AuthManager] Could not rotate Firebase Auth password for '${username}':`, err.message);
+                }
+            }
         }
         return { success: true };
     }
@@ -227,7 +239,7 @@ class AuthManager {
             const { passwordHash, password, firebaseAuthSecret, ...safeUser } = found;
             this.currentUser = safeUser;
             this.saveSession();
-            await this.syncFirebaseAuth(found.username);
+            await this.syncFirebaseAuth(found.username, found.passwordHash || hash);
             return { success: true, user: safeUser };
         }
         return { success: false, message: 'Невірне ім’я користувача або пароль' };
