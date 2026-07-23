@@ -378,7 +378,7 @@ app.whenReady().then(async () => {
         if (!currentUser || currentUser.role !== 'admin') {
             throw new Error('Тільки адміністратор може видаляти користувачів.');
         }
-        authManager.deleteUser(username);
+        await authManager.deleteUser(username);
         return { success: true };
     });
 

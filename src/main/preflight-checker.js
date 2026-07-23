@@ -1,26 +1,36 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
+const { HttpsProxyAgent } = require('https-proxy-agent');
+const { SocksProxyAgent } = require('socks-proxy-agent');
 
 class PreflightChecker {
-    // Basic proxy parse
     static parseProxy(proxyStr) {
         if (!proxyStr || proxyStr.trim() === '') return null;
         const str = proxyStr.trim();
+        let protocol = 'http';
+        let cleanStr = str;
+        if (str.startsWith('socks5://') || str.startsWith('socks4://')) {
+            protocol = 'socks5';
+            cleanStr = str.replace(/socks5:\/\//i, '').replace(/socks4:\/\//i, '');
+        } else if (str.startsWith('http://') || str.startsWith('https://')) {
+            cleanStr = str.replace(/https?:\/\//i, '');
+        }
+
         let host, port, user, pass;
-        if (str.includes('@')) {
-            const [auth, hp] = str.split('@');
+        if (cleanStr.includes('@')) {
+            const [auth, hp] = cleanStr.split('@');
             [user, pass] = auth.split(':');
             [host, port] = hp.split(':');
         } else {
-            const parts = str.split(':');
+            const parts = cleanStr.split(':');
             if (parts.length === 4) {
                 [host, port, user, pass] = parts;
             } else if (parts.length === 2) {
                 [host, port] = parts;
             }
         }
-        return (host && port) ? { host, port, user, pass } : null;
+        return (host && port) ? { protocol, host, port, user, pass } : null;
     }
 
     static async checkProxy(proxyStr) {
@@ -41,41 +51,124 @@ class PreflightChecker {
         };
     }
 
-    // Comprehensive 1-Click Anti-Detect & Health Diagnosis
+    // Perform REAL Network Ping via Proxy to ip-api.com
+    static async fetchLiveProxyInfo(proxyParsed) {
+        return new Promise((resolve) => {
+            if (!proxyParsed) return resolve({ ok: false, error: 'Без проксі' });
+
+            try {
+                let agent;
+                const authStr = (proxyParsed.user && proxyParsed.pass) ? `${proxyParsed.user}:${proxyParsed.pass}@` : '';
+                const proxyUrl = `${proxyParsed.protocol}://${authStr}${proxyParsed.host}:${proxyParsed.port}`;
+
+                if (proxyParsed.protocol === 'socks5') {
+                    agent = new SocksProxyAgent(proxyUrl);
+                } else {
+                    agent = new HttpsProxyAgent(proxyUrl);
+                }
+
+                const req = http.get('http://ip-api.com/json/', { agent, timeout: 6000 }, (res) => {
+                    let raw = '';
+                    res.on('data', chunk => raw += chunk);
+                    res.on('end', () => {
+                        try {
+                            const data = JSON.parse(raw);
+                            if (data && data.status === 'success') {
+                                resolve({
+                                    ok: true,
+                                    ip: data.query,
+                                    country: `${data.country} (${data.city})`,
+                                    timezone: data.timezone
+                                });
+                            } else {
+                                resolve({ ok: false, error: 'ip-api повернув статус помилки' });
+                            }
+                        } catch (e) {
+                            resolve({ ok: false, error: 'Помилка парсингу JSON відповіді проксі' });
+                        }
+                    });
+                });
+
+                req.on('error', (err) => {
+                    resolve({ ok: false, error: err.message });
+                });
+
+                req.on('timeout', () => {
+                    req.destroy();
+                    resolve({ ok: false, error: 'Перевищено час очікування (Timeout 6s)' });
+                });
+            } catch (e) {
+                resolve({ ok: false, error: e.message });
+            }
+        });
+    }
+
+    // Comprehensive Live Anti-Detect Health Diagnosis
     static async runFullHealthCheck(profile) {
         const warnings = [];
         let score = 100;
         let proxyIp = 'Не визначено';
         let country = 'Невідомо';
-        let detectedTimezone = 'Не визначено';
+        let realTimezone = null;
         let timezoneMatch = true;
 
         const proxyParsed = this.parseProxy(profile.proxy);
 
         if (!proxyParsed) {
-            score = 50;
             warnings.push('⚠️ Проксі не вказано — використовується пряме домашнє IP-підключення.');
+            return {
+                ok: true,
+                score: 50,
+                statusBadge: '🟡 Пряме підключення (Без проксі)',
+                proxyIp: 'Домашній IP',
+                country: 'Локальна мережа',
+                profileTimezone: profile.timezone || 'Системна',
+                timezoneMatch: true,
+                webrtcShield: false,
+                warnings,
+                checkedAt: Date.now()
+            };
         }
 
-        // WebRTC protection check
-        const webrtcShield = true; // Always active when proxy is supplied in OASIS Browser
+        // Live Real Network Echo Ping
+        const liveInfo = await this.fetchLiveProxyInfo(proxyParsed);
 
-        // Timezone consistency check
+        if (!liveInfo.ok) {
+            warnings.push(`❌ Помилка мережевого з'єднання з проксі: ${liveInfo.error}. Перевірте IP, порт та авторизацію.`);
+            return {
+                ok: false,
+                score: 0,
+                statusBadge: '🔴 Проксі недоступний або заблокований',
+                proxyIp: `${proxyParsed.host}:${proxyParsed.port}`,
+                country: 'Недоступно',
+                profileTimezone: profile.timezone || 'Не вказано',
+                timezoneMatch: false,
+                webrtcShield: true,
+                warnings,
+                checkedAt: Date.now()
+            };
+        }
+
+        // Live Network Success
+        proxyIp = liveInfo.ip;
+        country = liveInfo.country;
+        realTimezone = liveInfo.timezone;
+
+        // Compare real timezone with profile timezone
         if (profile.timezone && profile.timezone.trim() !== '') {
-            const tz = profile.timezone.trim();
-            // Validate valid timezone string format (e.g. America/New_York)
-            if (!tz.includes('/')) {
-                score -= 15;
+            const configuredTz = profile.timezone.trim();
+            if (realTimezone && configuredTz.toLowerCase() !== realTimezone.toLowerCase()) {
+                score -= 25;
                 timezoneMatch = false;
-                warnings.push(`⚠️ Нетиповий формат часового поясу: '${tz}'. Бажано вказувати Регіон/Місто (наприклад America/New_York).`);
+                warnings.push(`⚠️ Незбіг часового поясу! Налаштовано: '${configuredTz}', Реальний IP проксі: '${realTimezone}'. Рекомендовано змінити часовий пояс профілю на '${realTimezone}'.`);
             }
-        } else if (proxyParsed) {
+        } else {
             score -= 15;
             timezoneMatch = false;
-            warnings.push('⚠️ Не вказано часовий пояс проксі. Рекомендовано задати timezone для обходу Fraud Score.');
+            warnings.push(`⚠️ У профілі не вказано часовий пояс. Реальний пояс проксі: '${realTimezone}'. Рекомендовано задати його для обходу Anti-Fraud.`);
         }
 
-        let statusBadge = '🟢 100% Trust';
+        let statusBadge = '🟢 100% Trust (Ідеально)';
         if (score < 60) {
             statusBadge = '🔴 Високий ризик блокування';
         } else if (score < 100) {
@@ -86,11 +179,12 @@ class PreflightChecker {
             ok: true,
             score,
             statusBadge,
-            proxyIp: proxyParsed ? proxyParsed.host : 'Локальний IP',
-            country: proxyParsed ? 'Proxy Location' : 'Локальна мережа',
-            profileTimezone: profile.timezone || 'Системна',
+            proxyIp: `${proxyIp} (${proxyParsed.host})`,
+            country,
+            profileTimezone: profile.timezone || 'Не вказано',
+            realTimezone: realTimezone || 'Не визначено',
             timezoneMatch,
-            webrtcShield,
+            webrtcShield: true,
             warnings,
             checkedAt: Date.now()
         };

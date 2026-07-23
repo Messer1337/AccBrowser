@@ -216,13 +216,27 @@ class AuthManager {
         });
     }
 
-    deleteUser(username) {
-        if (username === 'admin') {
-            throw new Error('Неможливо видалити головного адміністратора.');
-        }
+    async deleteUser(username) {
         let users = this.getUsers();
+        const target = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+        if (!target) return true;
+
+        if (target.username.toLowerCase() === 'admin' || target.role === 'admin') {
+            throw new Error('Неможливо видалити користувача з роллю адміністратора.');
+        }
+
         users = users.filter(u => u.username.toLowerCase() !== username.toLowerCase());
         fs.writeJsonSync(this.usersFile, users, { spaces: 2 });
+
+        if (isFirebaseConfigured() && target.uid) {
+            try {
+                const db = getDb();
+                await deleteDoc(doc(db, 'authorizedUsers', target.uid));
+                console.log(`[AuthManager] Revoked Firestore authorization for '${username}' (UID: ${target.uid}).`);
+            } catch (err) {
+                console.warn(`[AuthManager] Could not revoke Firestore authorization for '${username}':`, err.message);
+            }
+        }
         return true;
     }
 
