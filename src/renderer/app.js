@@ -247,6 +247,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       // Bind Preflight Test Buttons
+      // Bind Preflight Health Check Buttons
       document.querySelectorAll('.btn-test').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           const id = e.target.getAttribute('data-id');
@@ -254,14 +255,32 @@ document.addEventListener('DOMContentLoaded', async () => {
           const origText = btn.textContent;
           btn.textContent = '⏳';
           try {
-            const res = await window.api.runPreflightTest(id);
-            if (res.ok) {
-              alert('✅ [УСПІХ]: ' + res.message);
-            } else {
-              alert('❌ [ПОМИЛКА ТЕСТУ]: ' + res.error);
-            }
+            const report = await window.api.runFullHealthCheck(id);
+            modalHealth.classList.add('active');
+
+            const scoreColor = report.score >= 85 ? '#10B981' : (report.score >= 60 ? '#F59E0B' : '#EF4444');
+            const warningsHtml = report.warnings && report.warnings.length > 0
+              ? report.warnings.map(w => `<div style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:6px; padding:8px 10px; font-size:12px; margin-top:6px; color:#fca5a5;">${escapeHtml(w)}</div>`).join('')
+              : '<div style="background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); border-radius:6px; padding:8px 10px; font-size:12px; margin-top:6px; color:#6ee7b7;">✅ Захист відбитків та мережевий тунель ідеальні (0 зауважень).</div>';
+
+            healthReportBody.innerHTML = `
+              <div style="text-align:center; margin-bottom:16px;">
+                <div style="font-size:32px; font-weight:800; color:${scoreColor};">${report.statusBadge}</div>
+                <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Trust Score: ${report.score}/100</div>
+              </div>
+              <div style="background:rgba(15,23,42,0.8); border:1px solid var(--border-color); border-radius:8px; padding:12px; font-size:13px; display:flex; flex-direction:column; gap:8px;">
+                <div>🌐 <b>Проксі IP:</b> <code>${escapeHtml(report.proxyIp)}</code></div>
+                <div>📍 <b>Геолокація:</b> ${escapeHtml(report.country)}</div>
+                <div>🕓 <b>Часовий пояс:</b> <code>${escapeHtml(report.profileTimezone)}</code> ${report.timezoneMatch ? '✅' : '⚠️'}</div>
+                <div>🛡 <b>WebRTC Leak Shield:</b> ${report.webrtcShield ? '🟢 Активовано (Захищено від витоку IP)' : '🔴 Вимкнено'}</div>
+              </div>
+              <div style="margin-top:14px;">
+                <b style="font-size:12px; text-transform:uppercase; color:var(--text-muted);">Результати діагностики:</b>
+                ${warningsHtml}
+              </div>
+            `;
           } catch (err) {
-            alert('❌ [ПОМИЛКА]: ' + err.message);
+            alert('❌ [ПОМИЛКА ДІАГНОСТИКИ]: ' + err.message);
           } finally {
             btn.disabled = false;
             btn.textContent = origText;
@@ -636,6 +655,61 @@ document.addEventListener('DOMContentLoaded', async () => {
         alert('❌ Помилка збереження користувача: ' + err.message);
       }
     });
+  }
+
+  // Health Check Modal Elements
+  const modalHealth = document.getElementById('modal-health');
+  const healthModalClose = document.getElementById('health-modal-close');
+  const healthModalOk = document.getElementById('health-modal-ok');
+  const healthReportBody = document.getElementById('health-report-body');
+
+  if (healthModalClose) healthModalClose.addEventListener('click', () => modalHealth.classList.remove('active'));
+  if (healthModalOk) healthModalOk.addEventListener('click', () => modalHealth.classList.remove('active'));
+
+  // Audit Logs Modal Elements
+  const navLogs = document.getElementById('nav-logs');
+  const modalLogs = document.getElementById('modal-logs');
+  const logsModalClose = document.getElementById('logs-modal-close');
+  const auditLogsContainer = document.getElementById('audit-logs-container');
+
+  if (logsModalClose) logsModalClose.addEventListener('click', () => modalLogs.classList.remove('active'));
+  if (navLogs) {
+    navLogs.addEventListener('click', async () => {
+      modalLogs.classList.add('active');
+      loadAuditLogs();
+    });
+  }
+
+  async function loadAuditLogs() {
+    try {
+      auditLogsContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">⏳ Завантаження журналу дій...</div>';
+      const logs = await window.api.getAuditLogs();
+      if (!logs || logs.length === 0) {
+        auditLogsContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">Записів у журналі дій ще немає.</div>';
+        return;
+      }
+
+      auditLogsContainer.innerHTML = logs.map(l => {
+        const dateStr = new Date(l.timestamp).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'medium' });
+        const userBadge = `<span style="font-weight:700; color:var(--accent-primary);">${escapeHtml(l.username)}</span>`;
+        const profileBadge = l.profileName ? `<span style="background:rgba(255,255,255,0.08); padding:2px 6px; border-radius:4px; font-size:11px;">${escapeHtml(l.profileName)}</span>` : '';
+
+        return `
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:rgba(30,41,59,0.7); border:1px solid rgba(255,255,255,0.05); border-radius:8px; font-size:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:14px;">⚡</span>
+              <div>
+                <div><strong>${escapeHtml(l.action)}</strong> ${profileBadge}</div>
+                <div style="font-size:11px; color:var(--text-muted);">Користувач: ${userBadge} | Пристрій: <code>${escapeHtml(l.deviceId || 'local')}</code></div>
+              </div>
+            </div>
+            <div style="font-size:11px; color:var(--text-muted); opacity:0.8;">${dateStr}</div>
+          </div>
+        `;
+      }).join('');
+    } catch (err) {
+      auditLogsContainer.innerHTML = `<div style="color:#ef4444; padding:10px;">❌ Помилка завантаження журналу: ${escapeHtml(err.message)}</div>`;
+    }
   }
 
   function escapeHtml(str) {

@@ -1,4 +1,4 @@
-const { doc, getDoc, setDoc, deleteDoc, collection, getDocs, onSnapshot } = require('firebase/firestore');
+const { doc, getDoc, setDoc, deleteDoc, collection, getDocs, addDoc, query, orderBy, limit, onSnapshot } = require('firebase/firestore');
 const { getDb, isFirebaseConfigured } = require('../config/firebase');
 const path = require('path');
 const fs = require('fs-extra');
@@ -298,6 +298,68 @@ class SyncManager {
                 console.warn(`[SyncManager] Could not delete profile '${id}' from Firestore:`, error.message);
             }
         }
+    }
+
+    // Team Audit Trail & Activity Log
+    async logActivity({ action, username, profileId, profileName, details = '' }) {
+        const logEntry = {
+            action: action || 'UNKNOWN_ACTION',
+            username: username || 'system',
+            profileId: profileId || null,
+            profileName: profileName || null,
+            details: details || '',
+            deviceId: this.deviceId,
+            timestamp: Date.now()
+        };
+
+        // 1. Save locally
+        const logsFile = path.join(this.localStorageDir, 'audit_logs.json');
+        try {
+            let logs = [];
+            if (await fs.pathExists(logsFile)) {
+                logs = await fs.readJson(logsFile);
+            }
+            logs.unshift(logEntry);
+            if (logs.length > 200) logs = logs.slice(0, 200); // keep recent 200
+            await fs.writeJson(logsFile, logs, { spaces: 2 });
+        } catch (e) {}
+
+        // 2. Save to Cloud Firestore
+        if (isFirebaseConfigured()) {
+            try {
+                const db = getDb();
+                await addDoc(collection(db, 'auditLogs'), logEntry);
+                console.log(`[SyncManager] Audit log recorded: ${action} by ${username}`);
+            } catch (error) {
+                console.warn('[SyncManager] Firestore audit log failed:', error.message);
+            }
+        }
+    }
+
+    async getAuditLogs() {
+        if (isFirebaseConfigured()) {
+            try {
+                const db = getDb();
+                const q = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(50));
+                const snapshot = await getDocs(q);
+                const cloudLogs = [];
+                snapshot.forEach(docSnap => {
+                    cloudLogs.push({ id: docSnap.id, ...docSnap.data() });
+                });
+                if (cloudLogs.length > 0) return cloudLogs;
+            } catch (error) {
+                console.warn('[SyncManager] Could not fetch audit logs from Firestore:', error.message);
+            }
+        }
+
+        // Fallback to local logs
+        const logsFile = path.join(this.localStorageDir, 'audit_logs.json');
+        try {
+            if (await fs.pathExists(logsFile)) {
+                return await fs.readJson(logsFile);
+            }
+        } catch (e) {}
+        return [];
     }
 }
 

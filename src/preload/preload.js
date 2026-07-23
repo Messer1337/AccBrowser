@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('api', {
     warmupProfile: (id) => ipcRenderer.invoke('warmup-profile', id),
     importCookies: (id, cookiesJson) => ipcRenderer.invoke('import-cookies', { id, cookiesJson }),
     runPreflightTest: (id) => ipcRenderer.invoke('run-preflight-test', id),
+    runFullHealthCheck: (id) => ipcRenderer.invoke('run-full-health-check', id),
+    getAuditLogs: () => ipcRenderer.invoke('get-audit-logs'),
     getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
     updateFirebaseConfig: (config) => ipcRenderer.invoke('update-firebase-config', config),
     exportProfiles: (password) => ipcRenderer.invoke('export-profiles', password),

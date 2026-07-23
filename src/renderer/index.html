@@ -111,6 +111,9 @@
         <button class="nav-item admin-only" id="nav-backup">
           <span class="nav-icon">📥</span> Бекап
         </button>
+        <button class="nav-item admin-only" id="nav-logs">
+          <span class="nav-icon">📜</span> Журнал дій
+        </button>
       </nav>
 
       <div class="sync-badge" id="sync-status-badge">
@@ -323,6 +326,37 @@
           <button type="submit" class="btn btn-primary">💾 Зберегти користувача</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Live Anti-Detect Health Diagnostic -->
+  <div class="modal-overlay" id="modal-health">
+    <div class="modal" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3>🔍 Двокроковий Тест Відбитку та Проксі</h3>
+        <button class="btn-close" id="health-modal-close">✕</button>
+      </div>
+      <div id="health-report-body" style="padding: 12px 0;">
+        <div style="text-align:center; padding: 20px;">⏳ Виконується діагностика захищеності профілю...</div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" id="health-modal-ok">Зрозуміло</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Activity Logs & Audit Trail -->
+  <div class="modal-overlay" id="modal-logs">
+    <div class="modal modal-users-box">
+      <div class="modal-header">
+        <h3>📜 Журнал Дій Команди (Audit Trail)</h3>
+        <button class="btn-close" id="logs-modal-close">✕</button>
+      </div>
+      <p class="modal-desc">Хронологія дій команди у реальному часі: запуск профілів, оновлення куків, авторизації та зміна налаштувань.</p>
+      
+      <div id="audit-logs-container" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; background: rgba(15,23,42,0.6); border: 1px solid var(--border-color); border-radius: 12px;">
+        <!-- Populated via app.js -->
+      </div>
     </div>
   </div>
 

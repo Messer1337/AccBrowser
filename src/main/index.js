@@ -184,12 +184,36 @@ app.whenReady().then(async () => {
         return await syncManager.getProfile(id);
     });
 
+    ipcMain.handle('run-full-health-check', async (event, profileId) => {
+        if (!authManager.canAccessProfile(profileId)) {
+            return { ok: false, error: 'Доступ заборонено.' };
+        }
+        const profile = await syncManager.getProfile(profileId);
+        if (!profile) return { ok: false, error: 'Профіль не знайдено.' };
+        return await PreflightChecker.runFullHealthCheck(profile);
+    });
+
+    ipcMain.handle('get-audit-logs', async () => {
+        const currentUser = authManager.getCurrentUser();
+        if (!currentUser || currentUser.role !== 'admin') {
+            throw new Error('Тільки адміністратор має доступ до журналу дій.');
+        }
+        return await syncManager.getAuditLogs();
+    });
+
     ipcMain.handle('save-profile', async (event, profile) => {
         const currentUser = authManager.getCurrentUser();
         if (!currentUser || currentUser.role !== 'admin') {
             throw new Error('Тільки адміністратор може редагувати або створювати профілі.');
         }
-        return await syncManager.saveProfile(profile, currentUser.username);
+        const result = await syncManager.saveProfile(profile, currentUser.username);
+        await syncManager.logActivity({
+            action: 'Збереження профілю',
+            username: currentUser.username,
+            profileId: profile.id,
+            profileName: profile.name
+        });
+        return result;
     });
 
     ipcMain.handle('delete-profile', async (event, id) => {
@@ -197,7 +221,15 @@ app.whenReady().then(async () => {
         if (!currentUser || currentUser.role !== 'admin') {
             throw new Error('Тільки адміністратор може видаляти профілі.');
         }
-        return await syncManager.deleteProfile(id);
+        const profile = await syncManager.getProfile(id);
+        const result = await syncManager.deleteProfile(id);
+        await syncManager.logActivity({
+            action: 'Видалення профілю',
+            username: currentUser.username,
+            profileId: id,
+            profileName: profile ? profile.name : id
+        });
+        return result;
     });
 
     ipcMain.handle('launch-profile', async (event, id) => {
@@ -212,7 +244,14 @@ app.whenReady().then(async () => {
             throw new Error(`Автотест не пройдено (Проксі): ${proxyCheck.error}`);
         }
 
-        return await browserLauncher.launchProfile(id, currentUser.username);
+        const launchResult = await browserLauncher.launchProfile(id, currentUser.username);
+        await syncManager.logActivity({
+            action: 'Запуск профілю',
+            username: currentUser.username,
+            profileId: id,
+            profileName: profile ? profile.name : id
+        });
+        return launchResult;
     });
 
     ipcMain.handle('warmup-profile', async (event, id) => {
@@ -220,7 +259,15 @@ app.whenReady().then(async () => {
         if (!currentUser || !authManager.canAccessProfile(id)) {
             throw new Error('Доступ заборонено.');
         }
-        return await browserLauncher.warmupProfile(id, currentUser.username);
+        const profile = await syncManager.getProfile(id);
+        const warmupResult = await browserLauncher.warmupProfile(id, currentUser.username);
+        await syncManager.logActivity({
+            action: 'Авто-прогрів профілю',
+            username: currentUser.username,
+            profileId: id,
+            profileName: profile ? profile.name : id
+        });
+        return warmupResult;
     });
 
     ipcMain.handle('import-cookies', async (event, { id, cookiesJson }) => {
@@ -265,6 +312,10 @@ app.whenReady().then(async () => {
         if (canceled || !filePath) return { success: false, message: 'Скасовано.' };
 
         await fs.writeFile(filePath, encrypted, 'utf8');
+        await syncManager.logActivity({
+            action: `Експорт бекапу (${profiles.length} профілів)`,
+            username: currentUser.username
+        });
         return { success: true, path: filePath, count: profiles.length };
     });
 
@@ -296,6 +347,11 @@ app.whenReady().then(async () => {
         for (const profile of backup.profiles) {
             await syncManager.saveProfile(profile, currentUser.username);
         }
+
+        await syncManager.logActivity({
+            action: `Імпорт бекапу (${backup.profiles.length} профілів)`,
+            username: currentUser.username
+        });
 
         return { success: true, count: backup.profiles.length };
     });
