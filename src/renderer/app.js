@@ -851,11 +851,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (updateProgressFill) updateProgressFill.style.width = `${data.percent}%`;
         if (btnUpdateNow) btnUpdateNow.style.display = 'none';
       } else if (data.status === 'downloaded') {
+        const isMac = window.api.platform === 'darwin';
         if (updateStatusIcon) updateStatusIcon.textContent = '🎉';
         if (updateStatusTitle) updateStatusTitle.textContent = `Версію v${data.version} завантажено!`;
-        if (updateStatusDesc) updateStatusDesc.textContent = 'Натисніть кнопку нижче, щоб перезапустити додаток і застосувати оновлення.';
+        if (updateStatusDesc) {
+          updateStatusDesc.textContent = isMac
+            ? 'На macOS застосунок поки не підписаний сертифікатом Apple, тому автоматично встановити не можна — натисніть кнопку, щоб відкрити сторінку завантаження і встановити вручну.'
+            : 'Натисніть кнопку нижче, щоб перезапустити додаток і застосувати оновлення.';
+        }
         if (updateProgressContainer) updateProgressContainer.style.display = 'none';
-        if (btnUpdateNow) btnUpdateNow.style.display = 'inline-block';
+        if (btnUpdateNow) {
+          btnUpdateNow.style.display = 'inline-block';
+          btnUpdateNow.textContent = isMac ? '🌐 Відкрити завантаження' : '🚀 Перезапустити зараз';
+        }
         if (btnUpdateCancel) btnUpdateCancel.textContent = 'Пізніше';
       } else if (data.status === 'error') {
         if (updateStatusIcon) updateStatusIcon.textContent = '⚠️';

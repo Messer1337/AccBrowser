@@ -1,5 +1,7 @@
-const { app, dialog, ipcMain } = require('electron');
+const { app, dialog, ipcMain, shell } = require('electron');
 const { autoUpdater } = require('electron-updater');
+
+const RELEASES_URL = 'https://github.com/Messer1337/AccBrowser/releases/latest';
 
 let mainWindowRef = null;
 
@@ -10,6 +12,28 @@ function sendToWindow(channel, data) {
 }
 
 function triggerInstallAndRelaunch() {
+    // Squirrel.Mac (what electron-updater uses on macOS) requires the app to be signed
+    // with an Apple Developer ID for quitAndInstall() to actually replace the app bundle
+    // and relaunch it — without a paid cert, this build isn't signed, so the silent
+    // install step does nothing (the app just closes and never reopens, no error surfaced
+    // because the window is already gone by the time it would fail). Until we have a
+    // Developer ID cert to sign+notarize mac builds, send the user to download it by hand
+    // instead of pretending the one-click relaunch will work.
+    if (process.platform === 'darwin') {
+        console.log('[AutoUpdater] macOS build is unsigned — falling back to manual download.');
+        shell.openExternal(RELEASES_URL);
+        if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+            dialog.showMessageBox(mainWindowRef, {
+                type: 'info',
+                title: 'Встановіть оновлення вручну',
+                message: 'На macOS автоматичне встановлення поки недоступне — застосунок ще не підписаний Apple-сертифікатом.',
+                detail: 'Відкрили сторінку релізу у браузері. Завантажте новий .zip, розпакуйте і перетягніть у папку Applications (Програми) поверх старої версії.',
+                buttons: ['Зрозуміло']
+            });
+        }
+        return;
+    }
+
     console.log('[AutoUpdater] Quitting and installing update...');
     setImmediate(() => {
         app.removeAllListeners("window-all-closed");
@@ -78,19 +102,20 @@ function initAutoUpdater(mainWindow) {
             message: `Оновлення v${info.version} успішно завантажено!` 
         });
 
-        const notes = typeof info.releaseNotes === 'string' 
-            ? info.releaseNotes.replace(/<[^>]+>/g, '').trim() 
+        const notes = typeof info.releaseNotes === 'string'
+            ? info.releaseNotes.replace(/<[^>]+>/g, '').trim()
             : '';
-        const detail = notes
-            ? `Що нового:\n\n${notes}\n\nПерезапустити зараз, щоб застосувати оновлення?`
+        const actionLine = process.platform === 'darwin'
+            ? 'Відкрити сторінку завантаження зараз?'
             : 'Перезапустити зараз, щоб застосувати оновлення?';
+        const detail = notes ? `Що нового:\n\n${notes}\n\n${actionLine}` : actionLine;
 
         const { response } = await dialog.showMessageBox(mainWindow, {
             type: 'info',
             title: 'Оновлення готове',
             message: `Завантажено нову версію OASIS Browser (${info.version}).`,
             detail,
-            buttons: ['Перезапустити зараз', 'Пізніше'],
+            buttons: [process.platform === 'darwin' ? 'Відкрити завантаження' : 'Перезапустити зараз', 'Пізніше'],
             defaultId: 0,
             cancelId: 1
         });
