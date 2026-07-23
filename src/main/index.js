@@ -143,7 +143,7 @@ app.whenReady().then(async () => {
     ipcMain.handle('get-users', async () => {
         const currentUser = authManager.getCurrentUser();
         if (currentUser && currentUser.role === 'admin') {
-            return authManager.getUsersSafe();
+            return await authManager.getUsersSafe();
         }
         return [];
     });
@@ -151,7 +151,7 @@ app.whenReady().then(async () => {
     ipcMain.handle('save-user', async (event, user) => {
         const currentUser = authManager.getCurrentUser();
         if (currentUser && currentUser.role === 'admin') {
-            return authManager.saveUser(user);
+            return await authManager.saveUser(user);
         }
         return false;
     });

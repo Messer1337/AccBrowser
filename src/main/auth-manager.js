@@ -2,7 +2,7 @@ const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
 const { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
-const { doc, deleteDoc } = require('firebase/firestore');
+const { doc, deleteDoc, setDoc, getDocs, collection } = require('firebase/firestore');
 const { getAuthInstance, getSecondaryAuthInstance, getDb, isFirebaseConfigured } = require('../config/firebase');
 
 // Firebase Auth identity is deliberately decoupled from the user's chosen local password:
@@ -163,9 +163,9 @@ class AuthManager {
         }
     }
 
-    saveUser(user) {
+    async saveUser(user) {
         const users = this.getUsers();
-        const idx = users.findIndex(u => u.username === user.username);
+        const idx = users.findIndex(u => u.username.toLowerCase() === user.username.toLowerCase());
         
         let userData = { ...user };
         if (userData.password) {
@@ -175,10 +175,29 @@ class AuthManager {
 
         if (idx !== -1) {
             users[idx] = { ...users[idx], ...userData };
+            userData = users[idx];
         } else {
             users.push(userData);
         }
         fs.writeJsonSync(this.usersFile, users, { spaces: 2 });
+
+        // Sync team user account to Cloud Firestore
+        if (isFirebaseConfigured()) {
+            try {
+                const db = getDb();
+                const cleanUserDoc = {
+                    username: userData.username,
+                    role: userData.role || 'user',
+                    allowedProfiles: userData.allowedProfiles || [],
+                    passwordHash: userData.passwordHash || '',
+                    updatedAt: Date.now()
+                };
+                await setDoc(doc(db, 'teamUsers', userData.username.toLowerCase()), cleanUserDoc);
+                console.log(`[AuthManager] Team user '${userData.username}' synced to Cloud Firestore.`);
+            } catch (err) {
+                console.warn(`[AuthManager] Could not sync team user '${userData.username}' to Firestore:`, err.message);
+            }
+        }
         return true;
     }
 
@@ -224,8 +243,35 @@ class AuthManager {
         return { success: true };
     }
 
-    getUsersSafe() {
-        const users = this.getUsers();
+    async getUsersSafe() {
+        let users = this.getUsers();
+
+        // Fetch team users from Cloud Firestore to keep multi-PC admin lists in sync
+        if (isFirebaseConfigured()) {
+            try {
+                const db = getDb();
+                const snapshot = await getDocs(collection(db, 'teamUsers'));
+                let updated = false;
+                snapshot.forEach(docSnap => {
+                    const cloudUser = docSnap.data();
+                    if (cloudUser && cloudUser.username) {
+                        const idx = users.findIndex(u => u.username.toLowerCase() === cloudUser.username.toLowerCase());
+                        if (idx !== -1) {
+                            users[idx] = { ...users[idx], ...cloudUser };
+                        } else {
+                            users.push(cloudUser);
+                        }
+                        updated = true;
+                    }
+                });
+                if (updated) {
+                    fs.writeJsonSync(this.usersFile, users, { spaces: 2 });
+                }
+            } catch (err) {
+                console.warn('[AuthManager] Could not fetch team users from Cloud Firestore:', err.message);
+            }
+        }
+
         return users.map(u => {
             const { passwordHash, password, firebaseAuthSecret, ...safe } = u;
             return safe;
@@ -235,25 +281,28 @@ class AuthManager {
     async deleteUser(username) {
         let users = this.getUsers();
         const target = users.find(u => u.username.toLowerCase() === username.toLowerCase());
-        if (!target) return true;
 
-        if (target.username.toLowerCase() === 'admin' || target.role === 'admin') {
+        if (username.toLowerCase() === 'admin' || (target && target.role === 'admin')) {
             throw new Error('Неможливо видалити користувача з роллю адміністратора.');
         }
 
         users = users.filter(u => u.username.toLowerCase() !== username.toLowerCase());
         fs.writeJsonSync(this.usersFile, users, { spaces: 2 });
 
-        if (isFirebaseConfigured() && target.firebaseUid) {
+        if (isFirebaseConfigured()) {
             try {
                 const db = getDb();
-                await deleteDoc(doc(db, 'authorizedUsers', target.firebaseUid));
-                console.log(`[AuthManager] Revoked Firestore authorization for '${username}' (UID: ${target.firebaseUid}).`);
+                // 1. Delete teamUsers cloud document
+                await deleteDoc(doc(db, 'teamUsers', username.toLowerCase()));
+
+                // 2. Revoke Firestore auth if UID present
+                if (target && target.firebaseUid) {
+                    await deleteDoc(doc(db, 'authorizedUsers', target.firebaseUid));
+                    console.log(`[AuthManager] Revoked Firestore authorization for '${username}' (UID: ${target.firebaseUid}).`);
+                }
             } catch (err) {
-                console.warn(`[AuthManager] Could not revoke Firestore authorization for '${username}':`, err.message);
+                console.warn(`[AuthManager] Could not revoke Cloud Firestore user '${username}':`, err.message);
             }
-        } else if (isFirebaseConfigured()) {
-            console.warn(`[AuthManager] No stored Firebase UID for '${username}' — could not auto-revoke Firestore access. Remove authorizedUsers/{uid} manually in the Firebase Console if they ever logged in before this fix.`);
         }
         return true;
     }

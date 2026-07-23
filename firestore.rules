@@ -53,5 +53,9 @@ service cloud.firestore {
       allow list, get: if isAdmin();
       allow update, delete: if false;
     }
+
+    match /teamUsers/{username} {
+      allow read, write: if isAdmin();
+    }
   }
 }

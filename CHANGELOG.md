@@ -3,6 +3,10 @@
 All notable changes to OASIS Browser are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/), versions follow [SemVer](https://semver.org/).
 
+## [1.3.0] - 2026-07-23
+### Added
+- Team User Accounts & Permissions Multi-PC Cloud Sync (`teamUsers` Cloud Firestore collection). Creating/editing team accounts on Mac #1 now instantly syncs to Mac #2 Admin panel.
+
 ## [1.2.0] - 2026-07-23
 ### Added
 - Real live network proxy pinging via HTTP/SOCKS5 tunnels (`ip-api.com`), fetching real IP, country, and timezone.
