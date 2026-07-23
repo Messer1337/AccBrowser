@@ -23,5 +23,10 @@ contextBridge.exposeInMainWorld('api', {
     updateFirebaseConfig: (config) => ipcRenderer.invoke('update-firebase-config', config),
     exportProfiles: (password) => ipcRenderer.invoke('export-profiles', password),
     importProfiles: (password) => ipcRenderer.invoke('import-profiles', password),
-    getChangelog: () => ipcRenderer.invoke('get-changelog')
+    getChangelog: () => ipcRenderer.invoke('get-changelog'),
+
+    getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+    installUpdate: () => ipcRenderer.invoke('install-update'),
+    onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, data) => callback(data))
 });

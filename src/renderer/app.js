@@ -780,6 +780,107 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (btn) btn.addEventListener('click', () => modalChangelog.classList.remove('active'));
   });
 
+  // App Version & Auto-Update UI Logic
+  const appVersionNum = document.getElementById('app-version-num');
+  const btnCheckUpdate = document.getElementById('btn-check-update');
+  const modalUpdate = document.getElementById('modal-update');
+  const updateModalClose = document.getElementById('update-modal-close');
+  const btnUpdateCancel = document.getElementById('btn-update-cancel');
+  const btnUpdateNow = document.getElementById('btn-update-now');
+  const updateStatusIcon = document.getElementById('update-status-icon');
+  const updateStatusTitle = document.getElementById('update-status-title');
+  const updateStatusDesc = document.getElementById('update-status-desc');
+  const updateProgressContainer = document.getElementById('update-progress-container');
+  const updateProgressFill = document.getElementById('update-progress-fill');
+
+  // Load app version
+  try {
+    const version = await window.api.getAppVersion();
+    if (version && appVersionNum) {
+      appVersionNum.textContent = `v${version}`;
+    }
+  } catch (e) {}
+
+  if (btnCheckUpdate) {
+    btnCheckUpdate.addEventListener('click', async () => {
+      if (modalUpdate) modalUpdate.classList.add('active');
+      if (updateStatusIcon) updateStatusIcon.textContent = '🔍';
+      if (updateStatusTitle) updateStatusTitle.textContent = 'Перевірка оновлень...';
+      if (updateStatusDesc) updateStatusDesc.textContent = "З'єднання з серверним маніфестом GitHub Releases...";
+      if (updateProgressContainer) updateProgressContainer.style.display = 'none';
+      if (btnUpdateNow) btnUpdateNow.style.display = 'none';
+      if (btnUpdateCancel) btnUpdateCancel.textContent = 'Скасувати';
+
+      const res = await window.api.checkForUpdates();
+      if (res && res.status === 'dev') {
+        if (updateStatusIcon) updateStatusIcon.textContent = '🛠️';
+        if (updateStatusTitle) updateStatusTitle.textContent = 'Режим Розробки';
+        if (updateStatusDesc) updateStatusDesc.textContent = res.message;
+      }
+    });
+  }
+
+  [updateModalClose, btnUpdateCancel].forEach(btn => {
+    if (btn) btn.addEventListener('click', () => {
+      if (modalUpdate) modalUpdate.classList.remove('active');
+    });
+  });
+
+  if (btnUpdateNow) {
+    btnUpdateNow.addEventListener('click', () => {
+      window.api.installUpdate();
+    });
+  }
+
+  if (window.api.onUpdateStatus) {
+    window.api.onUpdateStatus((data) => {
+      if (!data) return;
+      if (modalUpdate) modalUpdate.classList.add('active');
+
+      if (data.status === 'checking') {
+        if (updateStatusIcon) updateStatusIcon.textContent = '🔍';
+        if (updateStatusTitle) updateStatusTitle.textContent = 'Перевіряємо оновлення...';
+        if (updateStatusDesc) updateStatusDesc.textContent = data.message;
+        if (updateProgressContainer) updateProgressContainer.style.display = 'none';
+        if (btnUpdateNow) btnUpdateNow.style.display = 'none';
+      } else if (data.status === 'available') {
+        if (updateStatusIcon) updateStatusIcon.textContent = '🎁';
+        if (updateStatusTitle) updateStatusTitle.textContent = `Знайдено версію v${data.version}!`;
+        if (updateStatusDesc) updateStatusDesc.textContent = 'Завантаження інсталяційного пакету...';
+        if (updateProgressContainer) updateProgressContainer.style.display = 'block';
+        if (btnUpdateNow) btnUpdateNow.style.display = 'none';
+      } else if (data.status === 'not-available') {
+        if (updateStatusIcon) updateStatusIcon.textContent = '✅';
+        if (updateStatusTitle) updateStatusTitle.textContent = 'Найновіша версія';
+        if (updateStatusDesc) updateStatusDesc.textContent = data.message;
+        if (updateProgressContainer) updateProgressContainer.style.display = 'none';
+        if (btnUpdateNow) btnUpdateNow.style.display = 'none';
+        if (btnUpdateCancel) btnUpdateCancel.textContent = 'Чудово';
+      } else if (data.status === 'downloading') {
+        if (updateStatusIcon) updateStatusIcon.textContent = '⏳';
+        if (updateStatusTitle) updateStatusTitle.textContent = 'Завантаження оновлення...';
+        if (updateStatusDesc) updateStatusDesc.textContent = `${data.percent}% завершено`;
+        if (updateProgressContainer) updateProgressContainer.style.display = 'block';
+        if (updateProgressFill) updateProgressFill.style.width = `${data.percent}%`;
+        if (btnUpdateNow) btnUpdateNow.style.display = 'none';
+      } else if (data.status === 'downloaded') {
+        if (updateStatusIcon) updateStatusIcon.textContent = '🎉';
+        if (updateStatusTitle) updateStatusTitle.textContent = `Версію v${data.version} завантажено!`;
+        if (updateStatusDesc) updateStatusDesc.textContent = 'Натисніть кнопку нижче, щоб перезапустити додаток і застосувати оновлення.';
+        if (updateProgressContainer) updateProgressContainer.style.display = 'none';
+        if (btnUpdateNow) btnUpdateNow.style.display = 'inline-block';
+        if (btnUpdateCancel) btnUpdateCancel.textContent = 'Пізніше';
+      } else if (data.status === 'error') {
+        if (updateStatusIcon) updateStatusIcon.textContent = '⚠️';
+        if (updateStatusTitle) updateStatusTitle.textContent = 'Помилка оновлення';
+        if (updateStatusDesc) updateStatusDesc.textContent = data.message;
+        if (updateProgressContainer) updateProgressContainer.style.display = 'none';
+        if (btnUpdateNow) btnUpdateNow.style.display = 'none';
+        if (btnUpdateCancel) btnUpdateCancel.textContent = 'Закрити';
+      }
+    });
+  }
+
   // Initial Auth Check
   checkAuth();
 });

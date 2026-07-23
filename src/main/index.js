@@ -7,7 +7,7 @@ const SyncManager = require('./sync-manager');
 const BrowserLauncher = require('./browser-launcher');
 const AuthManager = require('./auth-manager');
 const PreflightChecker = require('./preflight-checker');
-const { initAutoUpdater } = require('./auto-updater');
+const { initAutoUpdater, registerUpdateIpc } = require('./auto-updater');
 
 let mainWindow = null;
 let syncManager = null;
@@ -401,6 +401,7 @@ app.whenReady().then(async () => {
         return { success: true };
     });
 
+    registerUpdateIpc();
     createWindow();
     initAutoUpdater(mainWindow);
 

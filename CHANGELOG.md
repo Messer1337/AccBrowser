@@ -3,6 +3,12 @@
 All notable changes to OASIS Browser are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/), versions follow [SemVer](https://semver.org/).
 
+## [1.6.0] - 2026-07-23
+### Added
+- Explicit App Version Badge (e.g., `v1.6.0`) displayed in the sidebar footer.
+- Manual Update Button `🔄 Перевірити оновлення` allowing any user to trigger live GitHub Releases check.
+- Interactive Update Progress Modal showing release detection, download percentage bar, and instant relaunch button (`autoUpdater.quitAndInstall(false, true)`).
+
 ## [1.5.0] - 2026-07-23
 ### Changed
 - Switched auto-update publishing back to GitHub Releases on the public repository `Messer1337/AccBrowser` for instant 100% reliable auto-updates across all macOS and Windows devices without CORS or host restrictions.

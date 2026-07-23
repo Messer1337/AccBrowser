@@ -123,6 +123,16 @@
         <span class="status-dot"></span>
         <span id="sync-status-text">Локальний режим</span>
       </div>
+
+      <div class="version-card">
+        <div class="version-info">
+          <span class="version-label">Версія:</span>
+          <span class="version-number" id="app-version-num">v1.5.0</span>
+        </div>
+        <button class="btn-check-update" id="btn-check-update">
+          <span>🔄 Перевірити оновлення</span>
+        </button>
+      </div>
     </aside>
 
     <!-- Main Content Area -->
@@ -375,6 +385,30 @@
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-primary" id="changelog-modal-ok">Зрозуміло</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Auto Update Check & Progress -->
+  <div class="modal-overlay" id="modal-update">
+    <div class="modal modal-md">
+      <div class="modal-header">
+        <h3 id="update-modal-title">🔄 Оновлення OASIS Browser</h3>
+        <button class="btn-close" id="update-modal-close">&times;</button>
+      </div>
+      <div class="update-modal-body" style="padding: 16px 0; text-align: center;">
+        <div class="update-status-icon" id="update-status-icon" style="font-size: 3rem; margin-bottom: 12px;">🔍</div>
+        <h4 class="update-status-title" id="update-status-title" style="margin-bottom: 8px; color: var(--text-main);">Перевірка оновлень...</h4>
+        <p class="update-status-desc" id="update-status-desc" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">З'єднання з серверним маніфестом GitHub Releases...</p>
+        
+        <div class="progress-bar-container" id="update-progress-container" style="display: none; height: 10px; background: rgba(255,255,255,0.1); border-radius: 6px; overflow: hidden; margin: 12px 0;">
+          <div class="progress-bar-fill" id="update-progress-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); transition: width 0.3s ease;"></div>
+        </div>
+
+        <div class="update-actions" style="display: flex; gap: 10px; justify-content: center; margin-top: 16px;">
+          <button class="btn btn-secondary" id="btn-update-cancel">Закрити</button>
+          <button class="btn btn-primary" id="btn-update-now" style="display: none; background: linear-gradient(135deg, #10b981, #059669);">🚀 Перезапустити зараз</button>
+        </div>
       </div>
     </div>
   </div>
