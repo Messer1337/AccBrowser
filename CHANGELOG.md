@@ -3,7 +3,12 @@
 All notable changes to OASIS Browser are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/), versions follow [SemVer](https://semver.org/).
 
-## [Unreleased]
+## [1.2.0] - 2026-07-23
+### Added
+- Real live network proxy pinging via HTTP/SOCKS5 tunnels (`ip-api.com`), fetching real IP, country, and timezone.
+- Instant cloud authorization revocation on user deletion (`deleteDoc` on `authorizedUsers/{uid}`).
+- Dynamic ESM imports for proxy agents (`https-proxy-agent`, `socks-proxy-agent`).
+- Modern 3D Glassmorphic macOS squircle icon and `app.setName('OASIS Browser')` Dock title.
 
 ## [1.1.0] - 2026-07-23
 ### Added
