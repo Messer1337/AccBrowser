@@ -9,7 +9,7 @@
     "build": "electron-builder --mac --win",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
-    "release": "node scripts/extract-release-notes.js && GH_TOKEN=$(gh auth token 2>/dev/null || echo $GH_TOKEN) electron-builder --mac --win --publish always"
+    "release": "node scripts/extract-release-notes.js && electron-builder --mac --win && node scripts/prepare-hosting.js && firebase deploy --only hosting"
   },
   "build": {
     "appId": "com.oasisbrowser.app",
@@ -20,11 +20,8 @@
       "output": "dist"
     },
     "publish": {
-      "provider": "github",
-      "owner": "Messer1337",
-      "repo": "AccBrowser",
-      "private": true,
-      "releaseType": "release"
+      "provider": "generic",
+      "url": "https://accbrowser.web.app/updates/"
     },
     "releaseInfo": {
       "releaseNotesFile": "RELEASE_NOTES_CURRENT.md"

@@ -8,7 +8,6 @@ const DIST_DIR = path.join(__dirname, '..', 'dist');
 const OUT_DIR = path.join(__dirname, '..', 'hosting_updates', 'updates');
 
 const KEEP_PATTERNS = [
-    /\.exe$/i,
     /\.zip$/i,
     /\.blockmap$/i,
     /^latest.*\.yml$/i
