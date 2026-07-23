@@ -3,6 +3,10 @@
 All notable changes to OASIS Browser are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/), versions follow [SemVer](https://semver.org/).
 
+## [1.4.0] - 2026-07-23
+### Fixed
+- Guaranteed Cloud Firestore upload for all newly created profiles. Previously, newly created empty-cookie profiles were skipping Firestore setDoc because unchanged cookie hash checks bypassed metadata sync.
+
 ## [1.3.0] - 2026-07-23
 ### Added
 - Team User Accounts & Permissions Multi-PC Cloud Sync (`teamUsers` Cloud Firestore collection). Creating/editing team accounts on Mac #1 now instantly syncs to Mac #2 Admin panel.

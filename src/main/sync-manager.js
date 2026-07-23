@@ -100,22 +100,19 @@ class SyncManager {
         const localFile = path.join(this.localStorageDir, `profile_${id}.json`);
         await fs.writeJson(localFile, profileData, { spaces: 2 });
 
-        // 2. Save to Firebase if cookies or metadata changed
+        // 2. Always sync profile & metadata to Firebase Cloud Firestore
         if (isFirebaseConfigured()) {
-            // Only write if cookies changed or activeHolder status changed
-            if (newCookieHash !== prevCookieHash || profile.activeHolderChanged) {
-                try {
-                    const db = getDb();
-                    const profileRef = doc(db, 'profiles', id);
-                    const { activeHolderChanged, ...dataToSync } = profileData;
-                    dataToSync.cookies = this.trimCookiesForSync(dataToSync.cookies);
-                    const cleanDataToSync = JSON.parse(JSON.stringify(dataToSync));
-                    await setDoc(profileRef, cleanDataToSync, { merge: true });
-                    this.cookieHashes.set(id, newCookieHash);
-                    console.log(`[SyncManager] Profile '${profile.name}' (${id}) synced to Cloud Firestore.`);
-                } catch (error) {
-                    console.error(`[SyncManager] Firestore sync failed for profile '${id}':`, error.message);
-                }
+            try {
+                const db = getDb();
+                const profileRef = doc(db, 'profiles', id);
+                const { activeHolderChanged, ...dataToSync } = profileData;
+                dataToSync.cookies = this.trimCookiesForSync(dataToSync.cookies);
+                const cleanDataToSync = JSON.parse(JSON.stringify(dataToSync));
+                await setDoc(profileRef, cleanDataToSync, { merge: true });
+                this.cookieHashes.set(id, newCookieHash);
+                console.log(`[SyncManager] Profile '${profile.name}' (${id}) synced to Cloud Firestore.`);
+            } catch (error) {
+                console.error(`[SyncManager] Firestore sync failed for profile '${id}':`, error.message);
             }
         }
         return profileData;
