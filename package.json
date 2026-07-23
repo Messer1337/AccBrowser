@@ -1,6 +1,6 @@
 {
   "name": "oasis-browser",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "OASIS Browser - Multi-Account Isolated Profile Platform",
   "author": "OASIS Team",
   "main": "src/main/index.js",

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
@@ -44,14 +44,24 @@ function decryptBackup(fileContent, password) {
 }
 
 function createWindow() {
-    const iconPath = path.join(__dirname, '../../assets/icon.png');
-    if (process.platform === 'darwin' && app.dock) {
-        app.dock.setIcon(iconPath);
+    const iconPath = app.isPackaged
+        ? path.join(app.getAppPath(), 'assets/icon.png')
+        : path.join(__dirname, '../../assets/icon.png');
+
+    try {
+        if (process.platform === 'darwin' && app.dock && fs.existsSync(iconPath)) {
+            const img = nativeImage.createFromPath(iconPath);
+            if (!img.isEmpty()) {
+                app.dock.setIcon(img);
+            }
+        }
+    } catch (e) {
+        console.warn('[Main] Dock icon load warning:', e.message);
     }
 
     mainWindow = new BrowserWindow({
         title: 'OASIS Browser',
-        icon: iconPath,
+        icon: fs.existsSync(iconPath) ? iconPath : undefined,
         width: 1100,
         height: 750,
         minWidth: 900,
