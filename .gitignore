@@ -6,6 +6,7 @@ dist/
 build/
 hosting_updates/
 .firebase/
+RELEASE_NOTES_CURRENT.md
 
 # Reverse engineering references and binary apps
 reference/

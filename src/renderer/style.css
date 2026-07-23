@@ -830,3 +830,43 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.changelog-body h4 {
+  color: var(--text-main);
+  font-size: 14px;
+  margin: 18px 0 8px;
+}
+
+.changelog-body h4:first-child {
+  margin-top: 4px;
+}
+
+.changelog-body .changelog-version {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-primary, var(--primary));
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  width: 100%;
+}
+
+.changelog-body ul {
+  margin: 0 0 4px;
+  padding-left: 18px;
+}
+
+.changelog-body li {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.changelog-body code {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 11px;
+  color: #e2e8f0;
+}

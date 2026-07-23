@@ -719,6 +719,67 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  // Changelog / "What's New" Modal
+  const navChangelog = document.getElementById('nav-changelog');
+  const modalChangelog = document.getElementById('modal-changelog');
+  const changelogModalClose = document.getElementById('changelog-modal-close');
+  const changelogModalOk = document.getElementById('changelog-modal-ok');
+  const changelogContainer = document.getElementById('changelog-container');
+
+  function renderChangelogMarkdown(md) {
+    const lines = escapeHtml(md).split('\n');
+    let html = '';
+    let inList = false;
+    const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+
+    for (const line of lines) {
+      if (/^## \[/.test(line)) {
+        closeList();
+        html += `<div class="changelog-version">${line.replace(/^## /, '')}</div>`;
+      } else if (/^### /.test(line)) {
+        closeList();
+        html += `<h4>${line.replace(/^### /, '')}</h4>`;
+      } else if (/^- /.test(line)) {
+        if (!inList) { html += '<ul>'; inList = true; }
+        let item = line.replace(/^- /, '')
+          .replace(/`([^`]+)`/g, '<code>$1</code>')
+          .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        html += `<li>${item}</li>`;
+      } else if (line.trim() === '' || /^# /.test(line)) {
+        closeList();
+      } else {
+        closeList();
+        html += `<p style="font-size:12px; color:var(--text-muted); margin:4px 0;">${line}</p>`;
+      }
+    }
+    closeList();
+    return html;
+  }
+
+  async function loadChangelog() {
+    changelogContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">⏳ Завантаження...</div>';
+    try {
+      const res = await window.api.getChangelog();
+      if (!res.success || !res.content) {
+        changelogContainer.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">Історія версій недоступна.</div>';
+        return;
+      }
+      changelogContainer.innerHTML = renderChangelogMarkdown(res.content);
+    } catch (err) {
+      changelogContainer.innerHTML = `<div style="color:#ef4444; padding:10px;">❌ ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  if (navChangelog) {
+    navChangelog.addEventListener('click', () => {
+      modalChangelog.classList.add('active');
+      loadChangelog();
+    });
+  }
+  [changelogModalClose, changelogModalOk].forEach(btn => {
+    if (btn) btn.addEventListener('click', () => modalChangelog.classList.remove('active'));
+  });
+
   // Initial Auth Check
   checkAuth();
 });

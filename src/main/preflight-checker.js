@@ -1,8 +1,8 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
-const { HttpsProxyAgent } = require('https-proxy-agent');
-const { SocksProxyAgent } = require('socks-proxy-agent');
+// https-proxy-agent / socks-proxy-agent ship as pure ESM in current major versions,
+// so they're loaded via dynamic import() from this CommonJS file rather than require().
 
 class PreflightChecker {
     static parseProxy(proxyStr) {
@@ -53,20 +53,26 @@ class PreflightChecker {
 
     // Perform REAL Network Ping via Proxy to ip-api.com
     static async fetchLiveProxyInfo(proxyParsed) {
+        if (!proxyParsed) return { ok: false, error: 'Без проксі' };
+
+        let agent;
+        try {
+            const authStr = (proxyParsed.user && proxyParsed.pass) ? `${proxyParsed.user}:${proxyParsed.pass}@` : '';
+            const proxyUrl = `${proxyParsed.protocol}://${authStr}${proxyParsed.host}:${proxyParsed.port}`;
+
+            if (proxyParsed.protocol === 'socks5') {
+                const { SocksProxyAgent } = await import('socks-proxy-agent');
+                agent = new SocksProxyAgent(proxyUrl);
+            } else {
+                const { HttpsProxyAgent } = await import('https-proxy-agent');
+                agent = new HttpsProxyAgent(proxyUrl);
+            }
+        } catch (e) {
+            return { ok: false, error: 'Не вдалося ініціалізувати проксі-агент: ' + e.message };
+        }
+
         return new Promise((resolve) => {
-            if (!proxyParsed) return resolve({ ok: false, error: 'Без проксі' });
-
             try {
-                let agent;
-                const authStr = (proxyParsed.user && proxyParsed.pass) ? `${proxyParsed.user}:${proxyParsed.pass}@` : '';
-                const proxyUrl = `${proxyParsed.protocol}://${authStr}${proxyParsed.host}:${proxyParsed.port}`;
-
-                if (proxyParsed.protocol === 'socks5') {
-                    agent = new SocksProxyAgent(proxyUrl);
-                } else {
-                    agent = new HttpsProxyAgent(proxyUrl);
-                }
-
                 const req = http.get('http://ip-api.com/json/', { agent, timeout: 6000 }, (res) => {
                     let raw = '';
                     res.on('data', chunk => raw += chunk);

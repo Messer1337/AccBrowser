@@ -357,6 +357,15 @@ app.whenReady().then(async () => {
         return { success: true, count: backup.profiles.length };
     });
 
+    ipcMain.handle('get-changelog', async () => {
+        try {
+            const content = await fs.readFile(path.join(app.getAppPath(), 'CHANGELOG.md'), 'utf8');
+            return { success: true, content };
+        } catch (e) {
+            return { success: false, content: '' };
+        }
+    });
+
     ipcMain.handle('get-sync-status', async () => {
         return {
             isCloudConfigured: isFirebaseConfigured(),

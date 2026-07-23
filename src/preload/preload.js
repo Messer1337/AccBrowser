@@ -22,5 +22,6 @@ contextBridge.exposeInMainWorld('api', {
     getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
     updateFirebaseConfig: (config) => ipcRenderer.invoke('update-firebase-config', config),
     exportProfiles: (password) => ipcRenderer.invoke('export-profiles', password),
-    importProfiles: (password) => ipcRenderer.invoke('import-profiles', password)
+    importProfiles: (password) => ipcRenderer.invoke('import-profiles', password),
+    getChangelog: () => ipcRenderer.invoke('get-changelog')
 });

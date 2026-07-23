@@ -1,6 +1,6 @@
 {
   "name": "oasis-browser",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "OASIS Browser - Multi-Account Isolated Profile Platform",
   "author": "OASIS Team",
   "main": "src/main/index.js",
@@ -9,7 +9,7 @@
     "build": "electron-builder --mac --win",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
-    "release": "GH_TOKEN=$(gh auth token 2>/dev/null || echo $GH_TOKEN) electron-builder --mac --win --publish always"
+    "release": "node scripts/extract-release-notes.js && GH_TOKEN=$(gh auth token 2>/dev/null || echo $GH_TOKEN) electron-builder --mac --win --publish always"
   },
   "build": {
     "appId": "com.oasisbrowser.app",
@@ -25,10 +25,14 @@
       "repo": "AccBrowser",
       "private": true
     },
+    "releaseInfo": {
+      "releaseNotesFile": "RELEASE_NOTES_CURRENT.md"
+    },
     "files": [
       "src/**/*",
       "assets/**/*",
-      "package.json"
+      "package.json",
+      "CHANGELOG.md"
     ],
     "mac": {
       "category": "public.app-category.utilities",
@@ -67,9 +71,11 @@
     "fingerprint-injector": "^2.1.58",
     "firebase": "^10.12.0",
     "fs-extra": "^11.2.0",
+    "https-proxy-agent": "^9.1.0",
     "puppeteer-core": "^22.10.0",
     "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "socks-proxy-agent": "^10.1.0"
   },
   "devDependencies": {
     "electron": "^30.5.1",

@@ -2,7 +2,8 @@ const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
 const { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
-const { getAuthInstance, getSecondaryAuthInstance, isFirebaseConfigured } = require('../config/firebase');
+const { doc, deleteDoc } = require('firebase/firestore');
+const { getAuthInstance, getSecondaryAuthInstance, getDb, isFirebaseConfigured } = require('../config/firebase');
 
 // Firebase Auth identity is deliberately decoupled from the user's chosen local password:
 // it's a random secret generated once and stored locally, so changing the local password
@@ -129,21 +130,36 @@ class AuthManager {
         const secret = this.getOrCreateFirebaseSecret(username);
         if (!secret) return;
         const email = toFirebaseEmail(username);
+        let credential = null;
 
         try {
-            await signInWithEmailAndPassword(auth, email, secret);
+            credential = await signInWithEmailAndPassword(auth, email, secret);
         } catch (err) {
             if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
                 try {
                     await createUserWithEmailAndPassword(secondaryAuth, email, secret);
                     await signOut(secondaryAuth);
-                    await signInWithEmailAndPassword(auth, email, secret);
+                    credential = await signInWithEmailAndPassword(auth, email, secret);
                 } catch (provisionErr) {
                     console.warn('[AuthManager] Firebase Auth provisioning failed:', provisionErr.message);
                 }
             } else {
                 console.warn('[AuthManager] Firebase Auth sign-in failed:', err.message);
             }
+        }
+
+        // Persist the real Firebase Auth uid so an admin can later revoke it (see deleteUser)
+        if (credential && credential.user) {
+            this.persistFirebaseUid(username, credential.user.uid);
+        }
+    }
+
+    persistFirebaseUid(username, uid) {
+        const users = this.getUsers();
+        const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+        if (user && user.firebaseUid !== uid) {
+            user.firebaseUid = uid;
+            fs.writeJsonSync(this.usersFile, users, { spaces: 2 });
         }
     }
 
@@ -228,14 +244,16 @@ class AuthManager {
         users = users.filter(u => u.username.toLowerCase() !== username.toLowerCase());
         fs.writeJsonSync(this.usersFile, users, { spaces: 2 });
 
-        if (isFirebaseConfigured() && target.uid) {
+        if (isFirebaseConfigured() && target.firebaseUid) {
             try {
                 const db = getDb();
-                await deleteDoc(doc(db, 'authorizedUsers', target.uid));
-                console.log(`[AuthManager] Revoked Firestore authorization for '${username}' (UID: ${target.uid}).`);
+                await deleteDoc(doc(db, 'authorizedUsers', target.firebaseUid));
+                console.log(`[AuthManager] Revoked Firestore authorization for '${username}' (UID: ${target.firebaseUid}).`);
             } catch (err) {
                 console.warn(`[AuthManager] Could not revoke Firestore authorization for '${username}':`, err.message);
             }
+        } else if (isFirebaseConfigured()) {
+            console.warn(`[AuthManager] No stored Firebase UID for '${username}' — could not auto-revoke Firestore access. Remove authorizedUsers/{uid} manually in the Firebase Console if they ever logged in before this fix.`);
         }
         return true;
     }
