@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build and dist outputs
+dist/
+build/
+hosting_updates/
+.firebase/
+
+# Reverse engineering references and binary apps
+reference/
+
+# Local database & profiles storage (contains user session cookies & tokens)
+local_db/
+profiles/
+*.json
+!package.json
+!package-lock.json
+!firebase.json
+
+# Environment and logs
+.env
+*.log
+
+# OS & IDE files
+.DS_Store
+.idea/
+.vscode/

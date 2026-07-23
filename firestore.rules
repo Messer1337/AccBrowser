@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // A user is "authorized" only if an admin has manually added their uid here
+    // via the Firebase Console (see authorizedUsers rules below for why this can't
+    // be self-service in a backend-less client app).
+    function isAuthorized() {
+      return request.auth != null &&
+        exists(/databases/$(database)/documents/authorizedUsers/$(request.auth.uid));
+    }
+
+    function myRole() {
+      return get(/databases/$(database)/documents/authorizedUsers/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isAuthorized() && myRole() == 'admin';
+    }
+
+    match /profiles/{profileId} {
+      allow get: if isAuthorized() && profileId.matches('^[a-zA-Z0-9_-]+$');
+      allow list: if isAuthorized();
+
+      allow create, update: if isAuthorized() && profileId.matches('^[a-zA-Z0-9_-]+$')
+        && request.resource.data.keys().hasAll(['id', 'name', 'url', 'cookies', 'updatedAt'])
+        && request.resource.data.id == profileId
+        && request.resource.data.name is string
+        && request.resource.data.url is string
+        && request.resource.data.cookies is list
+        && request.resource.data.updatedAt is number;
+
+      allow delete: if isAdmin();
+    }
+
+    // Anyone who has the app's Firebase apiKey can call createUserWithEmailAndPassword
+    // and obtain SOME request.auth.uid for free (that's how Firebase Auth works by design).
+    // So membership here must never be client-writable, or self-registration would let
+    // an outside attacker grant themselves admin. Provisioning is a deliberate manual step:
+    // after a teammate's first app login creates their Firebase Auth account (email
+    // "<username>@oasis-browser.local"), an admin adds { username, role } for their uid
+    // here from the Firebase Console.
+    match /authorizedUsers/{uid} {
+      allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
+      allow write: if false;
+    }
+  }
+}

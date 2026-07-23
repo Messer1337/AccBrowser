@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OASIS Browser - Multi-Account Profile Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Drag Region for Mac Titlebar -->
+  <div class="titlebar">
+    <div class="titlebar-drag">OASIS Browser — Profile Hub</div>
+  </div>
+
+  <!-- Fullscreen Login View Overlay -->
+  <div class="login-overlay active" id="login-overlay">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="logo-icon">🏝️</div>
+        <h2>OASIS Browser Login</h2>
+        <p>Авторизуйтесь для доступу до акаунтів</p>
+      </div>
+      <form id="form-login">
+        <div class="form-group">
+          <label for="login-username">Логін</label>
+          <input type="text" id="login-username" placeholder="наприклад: admin або user1" required autofocus />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Пароль</label>
+          <input type="password" id="login-password" placeholder="••••••••" required />
+        </div>
+        <div class="login-error" id="login-error"></div>
+        <button type="submit" class="btn btn-primary btn-block">Увійти в систему</button>
+      </form>
+      <div class="login-hint">
+        <small>💡 <b>Тестові акаунти:</b><br>
+        • Admin (доступ до всього): <code>admin</code> / <code>admin</code><br>
+        • Worker (лише ChatGPT): <code>user1</code> / <code>user</code></small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Forced Password Change -->
+  <div class="modal-overlay" id="modal-change-password">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>⚠️ Обов'язкова зміна дефолтного пароля</h3>
+      </div>
+      <p class="modal-desc">Ви використовуєте дефолтний пароль <code>admin</code>. Задля безпеки вашої системи необхідно створити новий пароль перед продовженням роботи.</p>
+      <form id="form-change-password">
+        <div class="form-group">
+          <label for="new-password">Новий пароль</label>
+          <input type="password" id="new-password" placeholder="Введіть новий надійний пароль" required minlength="4" />
+        </div>
+        <div class="form-group">
+          <label for="confirm-password">Підтвердження пароля</label>
+          <input type="password" id="confirm-password" placeholder="Повторіть новий пароль" required minlength="4" />
+        </div>
+        <div class="login-error" id="change-pass-error"></div>
+        <div class="modal-actions">
+          <button type="submit" class="btn btn-primary btn-block">Зберегти та продовжити</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="app-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="logo">
+        <div class="logo-icon">🏝️</div>
+        <div class="logo-text">OASIS</div>
+      </div>
+
+      <div class="user-badge-card" id="user-info-card">
+        <div class="user-avatar" id="user-avatar-initial">A</div>
+        <div class="user-details">
+          <div class="user-name" id="user-display-name">Admin</div>
+          <div class="user-role" id="user-display-role">Адміністратор</div>
+        </div>
+        <button class="btn-logout" id="btn-logout" title="Вийти">🚪</button>
+      </div>
+
+      <!-- Theme Selector Card -->
+      <div class="theme-selector-card">
+        <label for="theme-select">🎨 Тема оформлення:</label>
+        <select id="theme-select" class="theme-select">
+          <option value="cyber">🌌 Oasis Cyber (Neon Indigo)</option>
+          <option value="emerald">🌴 Oasis Emerald (Tropical)</option>
+          <option value="sunset">🌅 Oasis Sunset (Gold & Rose)</option>
+          <option value="midnight">🖤 Oasis Midnight (Cyberpunk)</option>
+        </select>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" id="nav-profiles">
+          <span class="nav-icon">📁</span> Профілі
+        </button>
+        <button class="nav-item admin-only" id="nav-users">
+          <span class="nav-icon">👥</span> Користувачі
+        </button>
+        <button class="nav-item admin-only" id="nav-guide">
+          <span class="nav-icon">📖</span> Інструкція Адміна
+        </button>
+        <button class="nav-item admin-only" id="nav-sync">
+          <span class="nav-icon">⚡</span> Синхронізація
+        </button>
+        <button class="nav-item admin-only" id="nav-backup">
+          <span class="nav-icon">📥</span> Бекап
+        </button>
+      </nav>
+
+      <div class="sync-badge" id="sync-status-badge">
+        <span class="status-dot"></span>
+        <span id="sync-status-text">Локальний режим</span>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="content-area">
+      <!-- Header -->
+      <header class="top-header">
+        <div>
+          <h1 class="page-title">Мульти-Акаунт Профілі</h1>
+          <p class="page-subtitle" id="worker-access-subtitle">Доступні ізольовані середовища для вашого акаунта</p>
+        </div>
+        <button class="btn btn-primary admin-only" id="btn-add-profile">
+          <span>+</span> Новий профіль
+        </button>
+      </header>
+
+      <!-- Profiles Grid -->
+      <div class="profiles-grid" id="profiles-container">
+        <!-- Rendered via app.js -->
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal: Profile Add/Edit -->
+  <div class="modal-overlay" id="modal-profile">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title">Створити Профіль</h3>
+        <button class="btn-close" id="modal-close">✕</button>
+      </div>
+      <form id="form-profile">
+        <input type="hidden" id="profile-id" />
+        <div class="form-group">
+          <label for="profile-name">Назва акаунта / сервісу</label>
+          <input type="text" id="profile-name" placeholder="наприклад: ChatGPT Pro" required />
+        </div>
+        <div class="form-group">
+          <label for="profile-url">Стартова URL-адреса</label>
+          <input type="url" id="profile-url" placeholder="https://chatgpt.com" required />
+        </div>
+        <div class="form-group">
+          <label for="profile-proxy">Проксі (обов'язково для антидетекту)</label>
+          <input type="text" id="profile-proxy" placeholder="ip:port:user:pass або user:pass@ip:port" />
+          <small>⚠️ Проксі має відповідати цільовому регіону акаунта (наприклад, US/DE)</small>
+        </div>
+        <div class="form-group">
+          <label for="profile-ua">User-Agent (опціонально)</label>
+          <input type="text" id="profile-ua" placeholder="Автоматично згенеровано унікальний відбиток..." />
+        </div>
+        <div class="form-group">
+          <label for="profile-timezone">Часовий пояс проксі (опціонально)</label>
+          <input type="text" id="profile-timezone" placeholder="наприклад: America/New_York" />
+          <small>🌍 Має відповідати геолокації проксі, інакше антифрод-системи побачать невідповідність</small>
+        </div>
+        <div class="form-group">
+          <label for="profile-cookies-import">Імпорт Куків (JSON масив)</label>
+          <textarea id="profile-cookies-import" rows="3" style="width:100%; background:rgba(15,23,42,0.8); border:1px solid var(--border-color); border-radius:6px; color:#fff; font-family:monospace; padding:8px; font-size:11px;" placeholder='[{"name":"sessionid","value":"xyz","domain":".instagram.com"}]'></textarea>
+          <small>🔥 Вставте збережені кукі для обходу Cloudflare / логін перевірок</small>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="modal-cancel">Скасувати</button>
+          <button type="submit" class="btn btn-primary">Зберегти Профіль</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Admin Guide -->
+  <div class="modal-overlay" id="modal-admin-guide">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>📖 Інструкція для Адміністратора: Як не спалити акаунти</h3>
+        <button class="btn-close" id="guide-modal-close">✕</button>
+      </div>
+      <div class="guide-content">
+        <div class="guide-step">
+          <h4>1. 🌐 Правильний підбір Проксі (80% безпеки)</h4>
+          <p>Використовуйте <b>Residential (Домашні) або 4G/5G мобільні проксі</b>. Ніколи не використовуйте дешеві DataCenter проксі (AWS/DigitalOcean) — Cloudflare і ChatGPT їх миттєво банять.</p>
+        </div>
+        <div class="guide-step">
+          <h4>2. 🛡 Автоматичний захист Fingerprint</h4>
+          <p>Додаток автоматично генерує унікальні апаратні відбитки (Canvas, WebGL, Screen, WebRTC) для кожного профілю. Адміну <b>не потрібно вручну змінювати User-Agent</b>, якщо в цьому немає потреби.</p>
+        </div>
+        <div class="guide-step">
+          <h4>3. 🔒 Захист доступу працівників (RBAC)</h4>
+          <p>Користувачі з роллю <b>Worker (user1, user2)</b> не мають кнопок редагування чи створення профілів і не бачать чужих акаунтів. Змінювати доступ можна у файлі <code>users.json</code>.</p>
+        </div>
+        <div class="guide-step">
+          <h4>4. ⚡ Автотестування перед запуском</h4>
+          <p>Перед відкриттям браузера кнопка <b>"🔍 Тест"</b> перевіряє життєздатність проксі та доступність сайту, щоб уникнути витоків IP.</p>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-primary" id="guide-modal-ok">Зрозуміло</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Firebase Sync Config (Complete Config Form) -->
+  <div class="modal-overlay" id="modal-sync-config">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>Налаштування Хмарної Синхронізації (Firebase)</h3>
+        <button class="btn-close" id="sync-modal-close">✕</button>
+      </div>
+      <p class="modal-desc">Введіть повні ключі безкоштовного проекту Firebase Firestore для авто-синхронізації сесій з колегами.</p>
+      <form id="form-sync-config">
+        <div class="form-group">
+          <label for="fb-api-key">API Key</label>
+          <input type="text" id="fb-api-key" value="AIzaSyAb9QYo5GupuDVHOH2nW1dP3fu1VgE5k4o" placeholder="AIzaSy..." required />
+        </div>
+        <div class="form-group">
+          <label for="fb-project-id">Project ID</label>
+          <input type="text" id="fb-project-id" value="accbrowser" placeholder="accbrowser" required />
+        </div>
+        <div class="form-group">
+          <label for="fb-auth-domain">Auth Domain</label>
+          <input type="text" id="fb-auth-domain" value="accbrowser.firebaseapp.com" placeholder="accbrowser.firebaseapp.com" required />
+        </div>
+        <div class="form-group">
+          <label for="fb-storage-bucket">Storage Bucket</label>
+          <input type="text" id="fb-storage-bucket" value="accbrowser.firebasestorage.app" placeholder="accbrowser.firebasestorage.app" required />
+        </div>
+        <div class="form-group">
+          <label for="fb-app-id">App ID</label>
+          <input type="text" id="fb-app-id" value="1:1024521590796:web:6d999d1585b6446183f629" placeholder="1:1024521590796:web:..." required />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" id="sync-modal-cancel">Скасувати</button>
+          <button type="submit" class="btn btn-primary">Підключити Хмару</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Encrypted Profile Backup -->
+  <div class="modal-overlay" id="modal-backup">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>📥 Бекап профілів</h3>
+        <button class="btn-close" id="backup-modal-close">✕</button>
+      </div>
+      <p class="modal-desc">Файл бекапу зашифрований (AES-256-GCM) паролем, який ви вказуєте тут — без нього файл марний, навіть якщо його хтось дістане.</p>
+      <div class="form-group">
+        <label for="backup-password">Пароль шифрування</label>
+        <input type="password" id="backup-password" placeholder="Мінімум 6 символів" minlength="6" />
+      </div>
+      <p id="backup-status-text" class="modal-desc"></p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" id="btn-import-backup">📤 Імпортувати</button>
+        <button type="button" class="btn btn-primary" id="btn-export-backup">📥 Експортувати всі профілі</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: User Management & Permissions -->
+  <div class="modal-overlay" id="modal-users">
+    <div class="modal modal-users-box">
+      <div class="modal-header">
+        <h3>👥 Управління Користувачами та Правами</h3>
+        <button class="btn-close" id="users-modal-close">✕</button>
+      </div>
+      <p class="modal-desc">Призначте, до яких профілів має доступ кожен співробітник. Співробітники бачитимуть та зможуть відкривати лише ті профілі, які ви відмітите прапорцями.</p>
+      
+      <div class="users-section-title">
+        <span>👥 Команда OASIS</span>
+      </div>
+      <div class="users-list-card" id="users-list-container">
+        <!-- Populated via app.js -->
+      </div>
+
+      <form id="form-user-edit" class="user-form-card">
+        <div class="users-section-title">
+          <span id="user-form-title">➕ Додати нового співробітника</span>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="user-username">Логін акаунта</label>
+            <input type="text" id="user-username" placeholder="наприклад: worker1" required />
+          </div>
+          <div class="form-group" style="margin-bottom: 0;">
+            <label for="user-role">Роль у системі</label>
+            <select id="user-role" style="width: 100%; height: 42px; background: rgba(15,23,42,0.9); border: 1px solid var(--border-color); border-radius: 8px; color: #fff; padding: 0 12px; font-size: 14px; outline: none;">
+              <option value="user">👤 Співробітник (Обмежений доступ)</option>
+              <option value="admin">👑 Адміністратор (Повний доступ)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label for="user-password">Пароль авторизації</label>
+          <input type="password" id="user-password" placeholder="Введіть новий пароль (або залишіть порожнім при редагуванні)" />
+        </div>
+
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label>🔒 Дозволені профілі для запуску:</label>
+          <div class="profile-access-grid" id="user-profiles-checkboxes">
+            <!-- Populated via app.js -->
+          </div>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 16px;">
+          <button type="button" class="btn btn-secondary" id="btn-reset-user-form">Очистити форму</button>
+          <button type="submit" class="btn btn-primary">💾 Зберегти користувача</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
