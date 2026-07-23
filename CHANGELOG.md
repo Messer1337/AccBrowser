@@ -3,6 +3,10 @@
 All notable changes to OASIS Browser are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/), versions follow [SemVer](https://semver.org/).
 
+## [1.5.0] - 2026-07-23
+### Changed
+- Switched auto-update publishing back to GitHub Releases on the public repository `Messer1337/AccBrowser` for instant 100% reliable auto-updates across all macOS and Windows devices without CORS or host restrictions.
+
 ## [1.4.0] - 2026-07-23
 ### Fixed
 - Guaranteed Cloud Firestore upload for all newly created profiles. Previously, newly created empty-cookie profiles were skipping Firestore setDoc because unchanged cookie hash checks bypassed metadata sync.
