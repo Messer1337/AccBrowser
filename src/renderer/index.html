@@ -26,7 +26,7 @@
       <form id="form-login">
         <div class="form-group">
           <label for="login-username">Логін</label>
-          <input type="text" id="login-username" placeholder="наприклад: admin або user1" required autofocus />
+          <input type="text" id="login-username" placeholder="наприклад: admin" required autofocus />
         </div>
         <div class="form-group">
           <label for="login-password">Пароль</label>
@@ -36,9 +36,8 @@
         <button type="submit" class="btn btn-primary btn-block">Увійти в систему</button>
       </form>
       <div class="login-hint">
-        <small>💡 <b>Тестові акаунти:</b><br>
-        • Admin (доступ до всього): <code>admin</code> / <code>admin</code><br>
-        • Worker (лише ChatGPT): <code>user1</code> / <code>user</code></small>
+        <small>💡 <b>Дефолтні дані для першого входу:</b><br>
+        • Логін: <code>admin</code> / Пароль: <code>admin</code></small>
       </div>
     </div>
   </div>
@@ -217,7 +216,7 @@
         </div>
         <div class="guide-step">
           <h4>3. 🔒 Захист доступу працівників (RBAC)</h4>
-          <p>Користувачі з роллю <b>Worker (user1, user2)</b> не мають кнопок редагування чи створення профілів і не бачать чужих акаунтів. Змінювати доступ можна у файлі <code>users.json</code>.</p>
+          <p>Користувачі з роллю <b>Worker</b> не мають кнопок редагування чи створення профілів і не бачать чужих акаунтів. Змінювати доступ можна у файлі <code>users.json</code>.</p>
         </div>
         <div class="guide-step">
           <h4>4. ⚡ Автотестування перед запуском</h4>

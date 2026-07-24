@@ -42,10 +42,8 @@ service cloud.firestore {
     // here from the Firebase Console.
     match /authorizedUsers/{uid} {
       allow read: if request.auth != null && (request.auth.uid == uid || isAdmin());
-      // Self-registration must stay impossible (see note above) — but an admin revoking
-      // an ex-teammate's access needs to be able to delete their record.
-      allow create, update: if false;
-      allow delete: if isAdmin();
+      // Admins can authorize and revoke teammates' UIDs
+      allow create, update, delete: if isAdmin();
     }
 
     match /auditLogs/{logId} {
@@ -55,7 +53,11 @@ service cloud.firestore {
     }
 
     match /teamUsers/{username} {
-      allow read, write: if isAdmin();
+      allow read: if request.auth != null && (
+        username == get(/databases/$(database)/documents/authorizedUsers/$(request.auth.uid)).data.username
+        || isAdmin()
+      );
+      allow write: if isAdmin();
     }
   }
 }

@@ -2,6 +2,12 @@ const { app, BrowserWindow, ipcMain, dialog, nativeImage } = require('electron')
 const path = require('path');
 const fs = require('fs-extra');
 const crypto = require('crypto');
+
+// Set overridden userData path as early as possible before any Electron processes or paths are initialized
+if (process.env.OASIS_USER_DATA_DIR) {
+    const customPath = path.resolve(process.env.OASIS_USER_DATA_DIR);
+    app.setPath('userData', customPath);
+}
 const { initFirebase, isFirebaseConfigured } = require('../config/firebase');
 const SyncManager = require('./sync-manager');
 const BrowserLauncher = require('./browser-launcher');
@@ -91,6 +97,26 @@ app.whenReady().then(async () => {
     syncManager = new SyncManager(userDataPath);
     browserLauncher = new BrowserLauncher(userDataPath, syncManager);
 
+    authManager.onForceLogout((data) => {
+        syncManager.unsubscribeFromProfilesCollection();
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('force-logout', data);
+        }
+    });
+
+    // Firebase Auth has no session persistence in the Electron main process (it's a plain
+    // Node context, not a browser), so request.auth is always null at app startup. Starting
+    // this listener here would hit a terminal permission-denied before anyone has logged in
+    // and never fire again. Instead it's (re)started from the 'login' handler below, once
+    // auth.currentUser is actually populated, and torn down on logout.
+    function startProfilesSync() {
+        syncManager.subscribeToProfilesCollection(() => {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('profiles-updated');
+            }
+        });
+    }
+
     // Starter profiles (only create if neither local nor cloud profile exists)
     const chatgptProfile = await syncManager.getProfile('chatgpt_profile');
     if (!chatgptProfile) {
@@ -139,10 +165,15 @@ app.whenReady().then(async () => {
 
     // IPC Handlers: Auth
     ipcMain.handle('login', async (event, username, password) => {
-        return authManager.login(username, password);
+        const result = await authManager.login(username, password);
+        if (result && result.success) {
+            startProfilesSync();
+        }
+        return result;
     });
 
     ipcMain.handle('logout', async () => {
+        syncManager.unsubscribeFromProfilesCollection();
         return authManager.logout();
     });
 

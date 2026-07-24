@@ -71,12 +71,33 @@ document.addEventListener('DOMContentLoaded', async () => {
   const confirmPasswordInput = document.getElementById('confirm-password');
   const changePassError = document.getElementById('change-pass-error');
 
+  // Register Push Event Listeners from Main Process
+  if (window.api && window.api.onForceLogout) {
+    window.api.onForceLogout((data) => {
+      console.warn('[App] Received forced logout event:', data);
+      currentUser = null;
+      profilesContainer.innerHTML = '';
+      alert(data.reason || 'Ваш сеанс було скасовано адміністратором.');
+      checkAuth();
+    });
+  }
+
+  if (window.api && window.api.onProfilesUpdated) {
+    window.api.onProfilesUpdated(() => {
+      console.log('[App] Real-time profiles update event received');
+      if (currentUser) {
+        loadProfiles();
+      }
+    });
+  }
+
   // Check Auth State
   async function checkAuth() {
     currentUser = await window.api.getCurrentUser();
     if (!currentUser) {
       loginOverlay.classList.add('active');
       modalChangePassword.classList.remove('active');
+      profilesContainer.innerHTML = '';
     } else {
       loginOverlay.classList.remove('active');
       if (currentUser.mustChangePassword) {

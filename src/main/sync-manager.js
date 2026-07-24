@@ -228,6 +228,59 @@ class SyncManager {
         }
     }
 
+    subscribeToProfilesCollection(onProfilesUpdated) {
+        if (!isFirebaseConfigured()) return () => {};
+        if (this.profilesCollectionUnsubscribe) {
+            this.profilesCollectionUnsubscribe();
+            this.profilesCollectionUnsubscribe = null;
+        }
+
+        try {
+            const db = getDb();
+            const profilesRef = collection(db, 'profiles');
+            this.profilesCollectionUnsubscribe = onSnapshot(profilesRef, (snapshot) => {
+                let changed = false;
+                snapshot.docChanges().forEach((change) => {
+                    const cloudData = change.doc.data();
+                    if (cloudData && cloudData.id) {
+                        const localFile = path.join(this.localStorageDir, `profile_${cloudData.id}.json`);
+                        if (change.type === 'removed') {
+                            if (fs.existsSync(localFile)) {
+                                fs.removeSync(localFile);
+                                changed = true;
+                            }
+                        } else if (change.type === 'added' || change.type === 'modified') {
+                            if (cloudData.lastSyncDevice !== this.deviceId) {
+                                fs.writeJsonSync(localFile, cloudData, { spaces: 2 });
+                                changed = true;
+                            }
+                        }
+                    }
+                });
+
+                if (changed || snapshot.metadata.hasPendingWrites === false) {
+                    if (typeof onProfilesUpdated === 'function') {
+                        onProfilesUpdated();
+                    }
+                }
+            }, (error) => {
+                console.warn('[SyncManager] Real-time profiles collection subscription error:', error.message);
+            });
+
+            return this.profilesCollectionUnsubscribe;
+        } catch (e) {
+            console.warn('[SyncManager] Failed to establish live profiles collection subscription:', e.message);
+            return () => {};
+        }
+    }
+
+    unsubscribeFromProfilesCollection() {
+        if (this.profilesCollectionUnsubscribe) {
+            this.profilesCollectionUnsubscribe();
+            this.profilesCollectionUnsubscribe = null;
+        }
+    }
+
     // List all profiles available (queries Cloud Firestore first if configured)
     async listProfiles() {
         const profilesMap = new Map();

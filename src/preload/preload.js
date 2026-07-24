@@ -30,5 +30,7 @@ contextBridge.exposeInMainWorld('api', {
     getAppVersion: () => ipcRenderer.invoke('get-app-version'),
     checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
     installUpdate: () => ipcRenderer.invoke('install-update'),
-    onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, data) => callback(data))
+    onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, data) => callback(data)),
+    onForceLogout: (callback) => ipcRenderer.on('force-logout', (event, data) => callback(data)),
+    onProfilesUpdated: (callback) => ipcRenderer.on('profiles-updated', () => callback())
 });
