@@ -4,6 +4,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const loginUsername = document.getElementById('login-username');
   const loginPassword = document.getElementById('login-password');
   const loginError = document.getElementById('login-error');
+  const formInitialSetup = document.getElementById('form-initial-setup');
+  const initialAdminPassword = document.getElementById('initial-admin-password');
+  const initialAdminPasswordConfirm = document.getElementById('initial-admin-password-confirm');
+  const initialSetupError = document.getElementById('initial-setup-error');
+  const loginHint = document.getElementById('login-hint');
 
   const userInfoCard = document.getElementById('user-info-card');
   const userAvatarInitial = document.getElementById('user-avatar-initial');
@@ -91,8 +96,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  if (window.api && window.api.onSyncError) {
+    window.api.onSyncError((data) => {
+      console.warn('[App] Profile sync error:', data);
+      const profileName = data.profileName || data.profileId || 'профіль';
+      syncStatusText.textContent = 'Потрібна дія: синхронізація профілю не виконана';
+      syncStatusBadge.classList.add('status-error');
+      alert(`⚠️ ${profileName}: сесія збережена локально, але не синхронізована. ${data.error}`);
+    });
+  }
+
   // Check Auth State
   async function checkAuth() {
+    const setupStatus = await window.api.getInitialSetupStatus();
+    if (setupStatus.needsSetup) {
+      formLogin.classList.add('hidden');
+      formInitialSetup.classList.remove('hidden');
+      loginHint.classList.remove('hidden');
+      loginOverlay.classList.add('active');
+      return;
+    }
+    formInitialSetup.classList.add('hidden');
+    formLogin.classList.remove('hidden');
+    loginHint.classList.remove('hidden');
     currentUser = await window.api.getCurrentUser();
     if (!currentUser) {
       loginOverlay.classList.add('active');
@@ -158,6 +184,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Handle Login Form Submit
+  formInitialSetup.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    initialSetupError.textContent = '';
+    if (initialAdminPassword.value !== initialAdminPasswordConfirm.value) {
+      initialSetupError.textContent = 'Паролі не збігаються';
+      return;
+    }
+    try {
+      await window.api.setupInitialAdmin(initialAdminPassword.value);
+      initialAdminPassword.value = '';
+      initialAdminPasswordConfirm.value = '';
+      await checkAuth();
+    } catch (err) {
+      initialSetupError.textContent = err.message || 'Не вдалося створити адміністратора';
+    }
+  });
+
   formLogin.addEventListener('submit', async (e) => {
     e.preventDefault();
     loginError.textContent = '';
@@ -502,9 +545,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    await window.api.saveProfile(profile);
+    const saved = await window.api.saveProfile(profile);
     modalProfile.classList.remove('active');
     loadProfiles();
+    if (saved && saved.cloudSyncError) {
+      alert(`⚠️ Профіль збережено лише локально. Cloud-синхронізація не виконана: ${saved.cloudSyncError}`);
+    }
   });
 
   // Submit Sync Config Form
@@ -807,7 +853,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (version && appVersionNum) {
       appVersionNum.textContent = `v${version}`;
     }
-  } catch (e) {}
+  } catch (error) {
+    console.warn('App version read notice:', error.message);
+  }
 
   if (btnCheckUpdate) {
     btnCheckUpdate.addEventListener('click', async () => {

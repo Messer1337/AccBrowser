@@ -7,30 +7,49 @@ const { URL } = require('url');
 class PreflightChecker {
     static parseProxy(proxyStr) {
         if (!proxyStr || proxyStr.trim() === '') return null;
-        const str = proxyStr.trim();
-        let protocol = 'http';
-        let cleanStr = str;
-        if (str.startsWith('socks5://') || str.startsWith('socks4://')) {
-            protocol = 'socks5';
-            cleanStr = str.replace(/socks5:\/\//i, '').replace(/socks4:\/\//i, '');
-        } else if (str.startsWith('http://') || str.startsWith('https://')) {
-            cleanStr = str.replace(/https?:\/\//i, '');
+        const value = proxyStr.trim();
+
+        // Legacy host:port:user:password is supported explicitly. All other forms are
+        // delegated to WHATWG URL so IPv6 and percent-encoded credentials stay intact.
+        const legacyParts = value.split(':');
+        if (!value.includes('://') && !value.includes('@') && /^[^\[\]:]+:\d{1,5}:[^:]+:.+$/.test(value)) {
+            const [host, port, user, ...passwordParts] = legacyParts;
+            if (!host || !/^\d{1,5}$/.test(port) || !user || passwordParts.length === 0) return null;
+            return { protocol: 'http', host, port, user, pass: passwordParts.join(':') };
         }
 
-        let host, port, user, pass;
-        if (cleanStr.includes('@')) {
-            const [auth, hp] = cleanStr.split('@');
-            [user, pass] = auth.split(':');
-            [host, port] = hp.split(':');
-        } else {
-            const parts = cleanStr.split(':');
-            if (parts.length === 4) {
-                [host, port, user, pass] = parts;
-            } else if (parts.length === 2) {
-                [host, port] = parts;
+        try {
+            const url = new URL(value.includes('://') ? value : `http://${value}`);
+            const protocol = url.protocol.replace(':', '').toLowerCase();
+            if (!['http', 'https', 'socks4', 'socks5'].includes(protocol) || !url.hostname || !url.port) {
+                return null;
             }
+            const port = Number(url.port);
+            if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+            return {
+                protocol,
+                host: url.hostname,
+                port: String(port),
+                user: url.username ? decodeURIComponent(url.username) : undefined,
+                pass: url.password ? decodeURIComponent(url.password) : undefined
+            };
+        } catch (e) {
+            return null;
         }
-        return (host && port) ? { protocol, host, port, user, pass } : null;
+    }
+
+    static async createProxyAgent(proxyParsed) {
+        const authStr = (proxyParsed.user && proxyParsed.pass)
+            ? `${encodeURIComponent(proxyParsed.user)}:${encodeURIComponent(proxyParsed.pass)}@`
+            : '';
+        const host = proxyParsed.host.includes(':') ? `[${proxyParsed.host}]` : proxyParsed.host;
+        const proxyUrl = `${proxyParsed.protocol}://${authStr}${host}:${proxyParsed.port}`;
+        if (proxyParsed.protocol === 'socks4' || proxyParsed.protocol === 'socks5') {
+            const { SocksProxyAgent } = await import('socks-proxy-agent');
+            return new SocksProxyAgent(proxyUrl);
+        }
+        const { HttpsProxyAgent } = await import('https-proxy-agent');
+        return new HttpsProxyAgent(proxyUrl);
     }
 
     static async checkProxy(proxyStr) {
@@ -39,15 +58,18 @@ class PreflightChecker {
         }
         const parsed = this.parseProxy(proxyStr);
         if (!parsed) {
-            return { ok: false, error: 'Некоректний формат проксі. Очікується host:port або user:pass@host:port' };
+            return { ok: false, error: 'Некоректний формат проксі. Очікується URL, host:port або legacy host:port:user:password.' };
         }
+        const liveInfo = await this.fetchLiveProxyInfo(parsed);
+        if (!liveInfo.ok) return { ok: false, error: liveInfo.error };
         return {
             ok: true,
             type: 'proxy',
             host: parsed.host,
             port: parsed.port,
             user: parsed.user || null,
-            message: `Проксі настроєно (${parsed.host}:${parsed.port})`
+            ip: liveInfo.ip,
+            message: `Проксі доступний (${parsed.host}:${parsed.port})`
         };
     }
 
@@ -57,16 +79,7 @@ class PreflightChecker {
 
         let agent;
         try {
-            const authStr = (proxyParsed.user && proxyParsed.pass) ? `${proxyParsed.user}:${proxyParsed.pass}@` : '';
-            const proxyUrl = `${proxyParsed.protocol}://${authStr}${proxyParsed.host}:${proxyParsed.port}`;
-
-            if (proxyParsed.protocol === 'socks5') {
-                const { SocksProxyAgent } = await import('socks-proxy-agent');
-                agent = new SocksProxyAgent(proxyUrl);
-            } else {
-                const { HttpsProxyAgent } = await import('https-proxy-agent');
-                agent = new HttpsProxyAgent(proxyUrl);
-            }
+            agent = await this.createProxyAgent(proxyParsed);
         } catch (e) {
             return { ok: false, error: 'Не вдалося ініціалізувати проксі-агент: ' + e.message };
         }
@@ -106,6 +119,43 @@ class PreflightChecker {
             } catch (e) {
                 resolve({ ok: false, error: e.message });
             }
+        });
+    }
+
+    static async checkUrlAccessibility(urlString, proxyString = '') {
+        let target;
+        try {
+            target = new URL(urlString);
+        } catch (e) {
+            return { ok: false, error: 'Некоректний URL профілю.' };
+        }
+        if (!['http:', 'https:'].includes(target.protocol) || !target.hostname) {
+            return { ok: false, error: 'Підтримуються лише HTTP(S) URL профілю.' };
+        }
+        if (target.hostname === 'localhost' || target.hostname.endsWith('.localhost') || /^(127\.|0\.0\.0\.0$|::1$)/.test(target.hostname)) {
+            return { ok: false, error: 'Локальні адреси не дозволені для мережевої перевірки.' };
+        }
+
+        let agent;
+        const proxy = this.parseProxy(proxyString);
+        try {
+            if (proxy) agent = await this.createProxyAgent(proxy);
+        } catch (e) {
+            return { ok: false, error: `Не вдалося ініціалізувати проксі: ${e.message}` };
+        }
+
+        return new Promise((resolve) => {
+            const client = target.protocol === 'https:' ? https : http;
+            const req = client.request(target, { method: 'HEAD', agent, timeout: 10000 }, (res) => {
+                res.resume();
+                resolve({ ok: res.statusCode >= 200 && res.statusCode < 500, statusCode: res.statusCode });
+            });
+            req.on('error', (err) => resolve({ ok: false, error: err.message }));
+            req.on('timeout', () => {
+                req.destroy();
+                resolve({ ok: false, error: 'Перевищено час очікування URL (10s)' });
+            });
+            req.end();
         });
     }
 

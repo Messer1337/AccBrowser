@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
     platform: process.platform,
 
+    getInitialSetupStatus: () => ipcRenderer.invoke('get-initial-setup-status'),
+    setupInitialAdmin: (password) => ipcRenderer.invoke('setup-initial-admin', password),
     login: (username, password) => ipcRenderer.invoke('login', username, password),
     logout: () => ipcRenderer.invoke('logout'),
     getCurrentUser: () => ipcRenderer.invoke('get-current-user'),
@@ -32,5 +34,6 @@ contextBridge.exposeInMainWorld('api', {
     installUpdate: () => ipcRenderer.invoke('install-update'),
     onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, data) => callback(data)),
     onForceLogout: (callback) => ipcRenderer.on('force-logout', (event, data) => callback(data)),
+    onSyncError: (callback) => ipcRenderer.on('sync-error', (event, data) => callback(data)),
     onProfilesUpdated: (callback) => ipcRenderer.on('profiles-updated', () => callback())
 });

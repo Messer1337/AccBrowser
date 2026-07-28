@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'" />
   <title>OASIS Browser - Multi-Account Profile Platform</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,9 +36,20 @@
         <div class="login-error" id="login-error"></div>
         <button type="submit" class="btn btn-primary btn-block">Увійти в систему</button>
       </form>
-      <div class="login-hint">
-        <small>💡 <b>Дефолтні дані для першого входу:</b><br>
-        • Логін: <code>admin</code> / Пароль: <code>admin</code></small>
+      <form id="form-initial-setup" class="hidden">
+        <div class="form-group">
+          <label for="initial-admin-password">Пароль першого адміністратора</label>
+          <input type="password" id="initial-admin-password" placeholder="Щонайменше 12 символів" required minlength="12" maxlength="256" />
+        </div>
+        <div class="form-group">
+          <label for="initial-admin-password-confirm">Підтвердження пароля</label>
+          <input type="password" id="initial-admin-password-confirm" placeholder="Повторіть пароль" required minlength="12" maxlength="256" />
+        </div>
+        <div class="login-error" id="initial-setup-error"></div>
+        <button type="submit" class="btn btn-primary btn-block">Створити адміністратора</button>
+      </form>
+      <div class="login-hint" id="login-hint">
+        <small>💡 Під час першого запуску створіть надійний пароль для облікового запису <code>admin</code>.</small>
       </div>
     </div>
   </div>
@@ -52,11 +64,11 @@
       <form id="form-change-password">
         <div class="form-group">
           <label for="new-password">Новий пароль</label>
-          <input type="password" id="new-password" placeholder="Введіть новий надійний пароль" required minlength="4" />
+          <input type="password" id="new-password" placeholder="Введіть новий надійний пароль" required minlength="12" maxlength="256" />
         </div>
         <div class="form-group">
           <label for="confirm-password">Підтвердження пароля</label>
-          <input type="password" id="confirm-password" placeholder="Повторіть новий пароль" required minlength="4" />
+          <input type="password" id="confirm-password" placeholder="Повторіть новий пароль" required minlength="12" maxlength="256" />
         </div>
         <div class="login-error" id="change-pass-error"></div>
         <div class="modal-actions">
@@ -323,7 +335,7 @@
 
         <div class="form-group" style="margin-bottom: 14px;">
           <label for="user-password">Пароль авторизації</label>
-          <input type="password" id="user-password" placeholder="Введіть новий пароль (або залишіть порожнім при редагуванні)" />
+          <input type="password" id="user-password" placeholder="Введіть новий пароль (мінімум 12 символів; порожньо при редагуванні)" minlength="12" maxlength="256" />
         </div>
 
         <div class="form-group" style="margin-bottom: 12px;">

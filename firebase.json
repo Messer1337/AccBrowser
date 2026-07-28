@@ -5,5 +5,22 @@
   },
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "functions": {
+    "source": "functions"
+  },
+  "emulators": {
+    "firestore": {
+      "port": 8087
+    },
+    "auth": {
+      "port": 9099
+    },
+    "functions": {
+      "port": 5001
+    },
+    "ui": {
+      "enabled": false
+    }
   }
 }

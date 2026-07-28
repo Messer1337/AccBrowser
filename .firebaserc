@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "accbrowser"
+    "default": "accbrowser",
+    "staging": "accbrowser-staging-20260725"
   }
 }

@@ -1,0 +1,37 @@
+name: Security checks
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install desktop dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts
+      - name: Run security smoke checks
+        run: npm run verify
+      - name: Run Firestore Rules integration tests (JDK 21)
+        run: npm run test:rules
+      - name: Run Functions emulator end-to-end tests
+        run: npm run test:functions
+      - name: Install and syntax-check Cloud Functions
+        run: npm ci --prefix functions --ignore-scripts && node --check functions/index.js
+      - name: Reject whitespace errors
+        run: git diff --check HEAD^ HEAD

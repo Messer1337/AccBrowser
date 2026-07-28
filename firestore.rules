@@ -18,17 +18,47 @@ service cloud.firestore {
       return isAuthorized() && myRole() == 'admin';
     }
 
-    match /profiles/{profileId} {
-      allow get: if isAuthorized() && profileId.matches('^[a-zA-Z0-9_-]+$');
-      allow list: if isAuthorized();
+    function hasProfileAccess(profileId) {
+      return isAdmin() || (
+        isAuthorized()
+        && get(/databases/$(database)/documents/authorizedUsers/$(request.auth.uid)).data.keys().hasAll(['allowedProfiles'])
+        && get(/databases/$(database)/documents/authorizedUsers/$(request.auth.uid)).data.allowedProfiles.hasAny([profileId, '*'])
+      );
+    }
 
-      allow create, update: if isAuthorized() && profileId.matches('^[a-zA-Z0-9_-]+$')
-        && request.resource.data.keys().hasAll(['id', 'name', 'url', 'cookies', 'updatedAt'])
-        && request.resource.data.id == profileId
-        && request.resource.data.name is string
-        && request.resource.data.url is string
-        && request.resource.data.cookies is list
-        && request.resource.data.updatedAt is number;
+    function isValidProfile(profileId) {
+      let profile = request.resource.data;
+      return profile.keys().hasOnly([
+          'id', 'name', 'url', 'proxy', 'userAgent', 'timezone', 'cookies', 'fingerprint', 'fingerprintHeaders', 'fingerprintUpdatedAt', 'revision', 'updatedBy',
+          'activeHolder', 'updatedAt', 'lastSyncUser', 'lastSyncDevice'
+        ])
+        && profile.keys().hasAll(['id', 'name', 'url', 'cookies', 'updatedAt'])
+        && profile.id == profileId
+        && profile.name is string && profile.name.size() > 0 && profile.name.size() <= 120
+        && profile.url is string && profile.url.size() > 0 && profile.url.size() <= 4096
+        && profile.cookies is list && profile.cookies.size() <= 5000
+        && profile.updatedAt is number
+        && (!profile.keys().hasAny(['proxy']) || (profile.proxy is string && profile.proxy.size() <= 4096))
+        && (!profile.keys().hasAny(['userAgent']) || (profile.userAgent is string && profile.userAgent.size() <= 2048))
+        && (!profile.keys().hasAny(['timezone']) || (profile.timezone is string && profile.timezone.size() <= 128))
+        && (!profile.keys().hasAny(['fingerprint']) || profile.fingerprint == null || profile.fingerprint is map)
+        && (!profile.keys().hasAny(['fingerprintHeaders']) || profile.fingerprintHeaders is map)
+        && (!profile.keys().hasAny(['fingerprintUpdatedAt']) || profile.fingerprintUpdatedAt == null || profile.fingerprintUpdatedAt is number)
+        && (!profile.keys().hasAny(['revision']) || (profile.revision is number && profile.revision >= 0))
+        && (!profile.keys().hasAny(['updatedBy']) || (profile.updatedBy is string && profile.updatedBy.size() <= 64))
+        && (!profile.keys().hasAny(['activeHolder']) || profile.activeHolder == null || profile.activeHolder is map)
+        && (!profile.keys().hasAny(['lastSyncUser']) || (profile.lastSyncUser is string && profile.lastSyncUser.size() <= 64))
+        && (!profile.keys().hasAny(['lastSyncDevice']) || (profile.lastSyncDevice is string && profile.lastSyncDevice.size() <= 160));
+    }
+
+    match /profiles/{profileId} {
+      // A UI-side filter is not authorization. A worker may fetch only profiles explicitly
+      // assigned in their own authorizedUsers record; only admins may enumerate or mutate profiles.
+      allow get: if hasProfileAccess(profileId) && profileId.matches('^[a-zA-Z0-9_-]+$');
+      allow list: if isAdmin();
+
+      allow create, update: if isAdmin() && profileId.matches('^[a-zA-Z0-9_-]+$')
+        && isValidProfile(profileId);
 
       allow delete: if isAdmin();
     }
@@ -47,7 +77,15 @@ service cloud.firestore {
     }
 
     match /auditLogs/{logId} {
-      allow create: if isAuthorized();
+      // The app always writes the caller's own username (see SyncManager.logActivity),
+      // so require it match their authorizedUsers record — otherwise any authorized
+      // (non-admin) user could forge a permanent entry framing a teammate for an action
+      // they never took, since admins treat this log as authoritative.
+      allow create: if isAuthorized()
+        && request.resource.data.action is string
+        && request.resource.data.timestamp is number
+        && request.resource.data.username is string
+        && request.resource.data.username == get(/databases/$(database)/documents/authorizedUsers/$(request.auth.uid)).data.username;
       allow list, get: if isAdmin();
       allow update, delete: if false;
     }

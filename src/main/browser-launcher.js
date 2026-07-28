@@ -2,18 +2,30 @@ const puppeteer = require('puppeteer-core');
 const path = require('path');
 const fs = require('fs-extra');
 const os = require('os');
+const { execFileSync } = require('child_process');
 const { FingerprintGenerator } = require('fingerprint-generator');
 const { FingerprintInjector } = require('fingerprint-injector');
+const PreflightChecker = require('./preflight-checker');
 
 class BrowserLauncher {
-    constructor(userDataPath, syncManager) {
+    constructor(userDataPath, syncManager, onSyncError = null) {
         this.userDataPath = userDataPath;
         this.syncManager = syncManager;
-        this.activeBrowsers = new Map(); // id -> { browser, page, syncInterval, unsubscribe }
+        this.onSyncError = onSyncError;
+        this.activeBrowsers = new Map(); // id -> { browser, page, leaseInterval, unsubscribe, syncCurrentCookies }
+        const platform = os.platform();
+        const fingerprintOperatingSystem = platform === 'darwin'
+            ? 'macos'
+            : platform === 'win32'
+                ? 'windows'
+                : 'linux';
+        this.fingerprintOperatingSystem = fingerprintOperatingSystem;
         this.fingerprintGenerator = new FingerprintGenerator({
             browsers: [{ name: 'chrome', minVersion: 120 }],
             devices: ['desktop'],
-            operatingSystems: ['windows', 'macos']
+            // A Windows fingerprint injected into Chrome on macOS (or vice versa) is a
+            // stable anomaly. Keep the generated navigator platform tied to the host OS.
+            operatingSystems: [fingerprintOperatingSystem]
         });
         this.fingerprintInjector = new FingerprintInjector();
     }
@@ -40,6 +52,35 @@ class BrowserLauncher {
             }
         }
         throw new Error('Google Chrome binary not found on your system. Please install Google Chrome.');
+    }
+
+    getChromeMajorVersion(executablePath) {
+        try {
+            const output = execFileSync(executablePath, ['--version'], { encoding: 'utf8', timeout: 3000 });
+            const match = output.match(/(\d+)\./);
+            const version = match ? Number(match[1]) : null;
+            return Number.isInteger(version) && version >= 100 && version <= 999 ? version : null;
+        } catch (error) {
+            console.warn('[BrowserLauncher] Chrome version detection notice:', error.message);
+            return null;
+        }
+    }
+
+    generateFingerprint(chromeMajor) {
+        if (chromeMajor) {
+            try {
+                return this.fingerprintGenerator.getFingerprint({
+                    browsers: [{ name: 'chrome', minVersion: chromeMajor, maxVersion: chromeMajor }],
+                    devices: ['desktop'],
+                    operatingSystems: [this.fingerprintOperatingSystem]
+                });
+            } catch (error) {
+                // The generator's dataset does not include every Chromium major version.
+                // Falling back preserves launch availability while making the mismatch visible.
+                console.warn(`[BrowserLauncher] Exact Chrome ${chromeMajor} fingerprint unavailable:`, error.message);
+            }
+        }
+        return this.fingerprintGenerator.getFingerprint();
     }
 
     // Inject cookies live into active browser instance
@@ -74,10 +115,14 @@ class BrowserLauncher {
             throw new Error(`Profile '${profileId}' not found.`);
         }
 
-        // Set active holder in SyncManager
-        await this.syncManager.setActiveHolder(profileId, username, true);
-
         const executablePath = this.findChromePath();
+        if (!profile.fingerprint || typeof profile.fingerprint !== 'object') {
+            const chromeMajor = this.getChromeMajorVersion(executablePath);
+            const generated = this.generateFingerprint(chromeMajor);
+            profile.fingerprint = generated.fingerprint;
+            profile.fingerprintHeaders = generated.headers;
+            profile.fingerprintUpdatedAt = Date.now();
+        }
 
         const profileDir = path.join(this.userDataPath, 'profiles', `profile_${profile.id}`);
         await fs.ensureDir(profileDir);
@@ -92,23 +137,12 @@ class BrowserLauncher {
 
         let proxyUser = '', proxyPass = '';
         if (profile.proxy && profile.proxy.trim() !== '') {
-            let proxyStr = profile.proxy.trim();
-            if (proxyStr.includes('@')) {
-                const [userPass, hostPort] = proxyStr.split('@');
-                const [u, p] = userPass.split(':');
-                proxyUser = u;
-                proxyPass = p;
-                args.push(`--proxy-server=http://${hostPort}`);
-            } else {
-                const parts = proxyStr.split(':');
-                if (parts.length === 4) {
-                    args.push(`--proxy-server=http://${parts[0]}:${parts[1]}`);
-                    proxyUser = parts[2];
-                    proxyPass = parts[3];
-                } else {
-                    args.push(`--proxy-server=http://${proxyStr}`);
-                }
-            }
+            const parsedProxy = PreflightChecker.parseProxy(profile.proxy);
+            if (!parsedProxy) throw new Error('Некоректний формат проксі.');
+            const host = parsedProxy.host.includes(':') ? `[${parsedProxy.host}]` : parsedProxy.host;
+            args.push(`--proxy-server=${parsedProxy.protocol}://${host}:${parsedProxy.port}`);
+            proxyUser = parsedProxy.user || '';
+            proxyPass = parsedProxy.pass || '';
 
             // Prevent WebRTC from leaking the real IP outside the proxy tunnel
             args.push('--force-webrtc-ip-handling-policy=disable_non_proxied_udp');
@@ -116,9 +150,21 @@ class BrowserLauncher {
             args.push('--proxy-bypass-list=<-loopback>');
         }
 
-        let customUserAgent = profile.userAgent ? profile.userAgent.trim() : '';
+        // The fingerprint's UA is canonical. A profile-level free-form UA that differs from
+        // navigator.userAgent is a detectable contradiction, so it is used only for legacy
+        // profiles that do not yet have a valid fingerprint.
+        const fingerprintUserAgent = profile.fingerprint?.navigator?.userAgent;
+        let customUserAgent = typeof fingerprintUserAgent === 'string' && fingerprintUserAgent
+            ? fingerprintUserAgent
+            : profile.userAgent ? profile.userAgent.trim() : '';
+        if (customUserAgent) profile.userAgent = customUserAgent;
         if (customUserAgent) {
             args.push(`--user-agent=${customUserAgent}`);
+        }
+        const fingerprintLocale = profile.fingerprintHeaders?.['accept-language']?.split(',')[0]
+            || profile.fingerprint?.navigator?.language;
+        if (typeof fingerprintLocale === 'string' && /^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(fingerprintLocale)) {
+            args.push(`--lang=${fingerprintLocale}`);
         }
 
         console.log(`[BrowserLauncher] Launching Chrome for profile: ${profile.name}`);
@@ -133,68 +179,59 @@ class BrowserLauncher {
 
         const [page] = await browser.pages();
 
+        // A successful Chrome launch is the earliest safe point to claim a profile. Claiming
+        // later leaves a window in which another device can launch the same profile too.
         try {
-            const { fingerprint } = this.fingerprintGenerator.getFingerprint();
-            if (typeof this.fingerprintInjector.attachFingerprintToPuppeteerPage === 'function') {
-                await this.fingerprintInjector.attachFingerprintToPuppeteerPage(page, fingerprint);
-            } else if (typeof this.fingerprintInjector.attachFingerprintToPage === 'function') {
-                await this.fingerprintInjector.attachFingerprintToPage(page, fingerprint);
-            }
-            console.log(`[BrowserLauncher] Anti-detection fingerprint injected successfully.`);
-        } catch (fErr) {
-            console.warn(`[BrowserLauncher] Fingerprint notice:`, fErr.message);
+            profile.activeHolder = await this.syncManager.setActiveHolder(profileId, username, true)
+                || { username, deviceId: this.syncManager.deviceId, launchedAt: Date.now() };
+        } catch (error) {
+            await browser.close().catch(() => {});
+            throw error;
         }
 
-        if (proxyUser && proxyPass) {
-            await page.authenticate({ username: proxyUser, password: proxyPass });
-            console.log(`[BrowserLauncher] Proxy authentication set for: ${proxyUser}`);
-        }
-
-        // Keep the reported timezone consistent with the proxy's geography (avoids fraud-score mismatches)
-        if (profile.timezone && profile.timezone.trim() !== '') {
-            try {
-                await page.emulateTimezone(profile.timezone.trim());
-                console.log(`[BrowserLauncher] Timezone emulated: ${profile.timezone}`);
-            } catch (tzErr) {
-                console.warn(`[BrowserLauncher] Invalid timezone '${profile.timezone}':`, tzErr.message);
-            }
-        }
-
-        await page.evaluateOnNewDocument(() => {
-            Object.defineProperty(navigator, 'webdriver', { get: () => false });
+        // Register cleanup immediately. Setup below can still fail (proxy authentication,
+        // navigation, or an extension error) after the lease has been claimed.
+        browser.once('disconnected', () => {
+            this.syncManager.setActiveHolder(profileId, username, false).catch(error => {
+                console.warn(`[BrowserLauncher] Could not release early profile lease '${profile.name}':`, error.message);
+            });
         });
 
-        // Setup Logout Blocker & Interception
-        const setupLogoutBlocker = async (targetPage) => {
+        try {
+            await this.syncManager.ensureProfileFingerprint(profile, username);
+        } catch (error) {
+            // Fingerprinting must not prevent a legitimate, already-leased browser launch.
+            console.warn(`[BrowserLauncher] Fingerprint persistence notice:`, error.message);
+        }
+
+        const applyProfileIdentity = async (targetPage) => {
             if (!targetPage || targetPage.isClosed()) return;
             try {
-                if (!targetPage._requestInterceptionEnabled) {
-                    await targetPage.setRequestInterception(true);
-                    targetPage.on('request', (req) => {
-                        const url = req.url().toLowerCase();
-                        const logoutKeywords = ['/logout', '/signout', '/log_out', '/sign_out', 'auth/logout', 'accounts/logout'];
-                        const isLogout = logoutKeywords.some(kw => url.includes(kw));
-
-                        if (isLogout) {
-                            console.warn(`[LogoutBlocker] Blocked accidental logout attempt: ${req.url()}`);
-                            return req.abort('blockedbyclient');
-                        }
-                        req.continue();
-                    });
+                const fingerprint = profile.fingerprint;
+                if (!fingerprint || typeof fingerprint !== 'object') throw new Error('Fingerprint профілю відсутній.');
+                if (typeof this.fingerprintInjector.attachFingerprintToPuppeteerPage === 'function') {
+                    await this.fingerprintInjector.attachFingerprintToPuppeteerPage(targetPage, fingerprint);
+                } else if (typeof this.fingerprintInjector.attachFingerprintToPage === 'function') {
+                    await this.fingerprintInjector.attachFingerprintToPage(targetPage, fingerprint);
                 }
-            } catch (e) {}
+                if (profile.fingerprintHeaders && typeof profile.fingerprintHeaders === 'object') {
+                    await targetPage.setExtraHTTPHeaders(profile.fingerprintHeaders);
+                }
+                if (proxyUser && proxyPass) {
+                    await targetPage.authenticate({ username: proxyUser, password: proxyPass });
+                }
+                if (profile.timezone && profile.timezone.trim() !== '') {
+                    await targetPage.emulateTimezone(profile.timezone.trim());
+                }
+                await targetPage.evaluateOnNewDocument(() => {
+                    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+                });
+            } catch (error) {
+                console.warn(`[BrowserLauncher] Profile identity notice:`, error.message);
+            }
         };
 
-        await setupLogoutBlocker(page);
-
-        browser.on('targetcreated', async (target) => {
-            try {
-                if (target.type() === 'page') {
-                    const newPage = await target.page();
-                    if (newPage) await setupLogoutBlocker(newPage);
-                }
-            } catch (e) {}
-        });
+        await applyProfileIdentity(page);
 
         if (profile.cookies && Array.isArray(profile.cookies) && profile.cookies.length > 0) {
             await this.injectCookiesLive(browser, profile.cookies);
@@ -205,15 +242,43 @@ class BrowserLauncher {
             console.warn(`[BrowserLauncher] Initial navigation notice: ${err.message}`);
         });
 
-        // Periodic Local Cookie Sync
+        // Read the complete Chrome cookie jar, not only cookies visible to the first tab.
+        // A profile can gain session cookies on a warm-up or popup domain.
+        const getAllCookies = async () => {
+            const client = await page.target().createCDPSession();
+            try {
+                const { cookies } = await client.send('Network.getAllCookies');
+                return cookies;
+            } finally {
+                await client.detach().catch(() => {});
+            }
+        };
+
+        // Cookie sync is driven by browser activity and debounced. This eliminates a
+        // permanent five-second polling loop while still coalescing redirect-heavy flows.
+        let syncTimer = null;
+        let lastReportedSyncError = null;
         const syncCurrentCookies = async () => {
             if (!browser.isConnected()) return;
             try {
                 if (page.isClosed()) return;
-                const currentCookies = await page.cookies();
+                const currentCookies = await getAllCookies();
+                if (!this.syncManager.hasCookieChanges(profileId, currentCookies)) return;
                 profile.cookies = currentCookies;
                 profile.updatedAt = Date.now();
-                await this.syncManager.saveProfile(profile, username);
+                const saved = await this.syncManager.saveProfile(profile, username, { cloudMode: 'session' });
+                if (saved.cloudSyncError) {
+                    if (saved.cloudSyncError !== lastReportedSyncError && typeof this.onSyncError === 'function') {
+                        lastReportedSyncError = saved.cloudSyncError;
+                        this.onSyncError({
+                            profileId,
+                            profileName: profile.name,
+                            error: saved.cloudSyncError
+                        });
+                    }
+                    return;
+                }
+                lastReportedSyncError = null;
                 console.log(`[BrowserLauncher] Periodically synced ${currentCookies.length} cookies for profile '${profile.name}'.`);
             } catch (err) {
                 const msg = err.message || '';
@@ -223,27 +288,61 @@ class BrowserLauncher {
             }
         };
 
-        // Short interval is cheap now — saveProfile skips the Firestore write when the cookie hash is unchanged
-        const syncInterval = setInterval(syncCurrentCookies, 5000);
+        const scheduleCookieSync = () => {
+            if (syncTimer) clearTimeout(syncTimer);
+            syncTimer = setTimeout(() => {
+                syncTimer = null;
+                syncCurrentCookies();
+            }, 1500);
+        };
+
+        const watchCookieChanges = (targetPage) => {
+            if (!targetPage || targetPage.isClosed()) return;
+            targetPage.on('response', scheduleCookieSync);
+            targetPage.on('framenavigated', scheduleCookieSync);
+        };
+
+        watchCookieChanges(page);
+
+        // Each new tab receives the same fingerprint, locale, timezone, headers and proxy
+        // credentials before its next navigation, then participates in cookie detection.
+        browser.on('targetcreated', async (target) => {
+            try {
+                if (target.type() === 'page') {
+                    const newPage = await target.page();
+                    await applyProfileIdentity(newPage);
+                    watchCookieChanges(newPage);
+                }
+            } catch (error) {
+                console.warn('[BrowserLauncher] New tab watcher notice:', error.message);
+            }
+        });
 
         // Real-time listener for remote updates from parallel colleagues
         const unsubscribe = this.syncManager.subscribeToProfile(profileId, async (remoteProfileData) => {
             if (remoteProfileData && remoteProfileData.cookies) {
                 console.log(`[BrowserLauncher] Applying live remote cookies from colleague for profile '${profile.name}'...`);
+                profile.cookies = remoteProfileData.cookies;
+                profile.updatedAt = remoteProfileData.updatedAt || profile.updatedAt;
                 await this.injectCookiesLive(browser, remoteProfileData.cookies);
             }
         });
 
-        this.activeBrowsers.set(profileId, { browser, page, syncInterval, unsubscribe });
+        const leaseInterval = setInterval(() => {
+            this.syncManager.heartbeatProfileLease(profileId).catch(error => {
+                console.warn(`[BrowserLauncher] Profile lease heartbeat failed for '${profile.name}':`, error.message);
+            });
+        }, 60 * 1000);
+        this.activeBrowsers.set(profileId, { browser, page, leaseInterval, unsubscribe, syncCurrentCookies });
 
         browser.on('disconnected', async () => {
-            clearInterval(syncInterval);
-            // Best-effort final flush; the CDP session may already be gone by this point,
-            // but the 5s interval above means at most one cycle's worth of cookies is at risk anyway.
-            await syncCurrentCookies();
+            if (syncTimer) clearTimeout(syncTimer);
+            clearInterval(leaseInterval);
             if (typeof unsubscribe === 'function') unsubscribe();
             this.activeBrowsers.delete(profileId);
-            await this.syncManager.setActiveHolder(profileId, username, false);
+            await this.syncManager.setActiveHolder(profileId, username, false).catch(error => {
+                console.warn(`[BrowserLauncher] Could not release profile lease '${profile.name}':`, error.message);
+            });
             console.log(`[BrowserLauncher] Browser for profile '${profile.name}' closed. Active holder cleared.`);
         });
 
@@ -284,6 +383,16 @@ class BrowserLauncher {
 
     isProfileRunning(profileId) {
         return this.activeBrowsers.has(profileId);
+    }
+
+    // Used by the Electron shutdown path. Unlike a user killing Chrome directly, this still
+    // has an active CDP connection and can persist the last cookie changes before closing it.
+    async shutdown() {
+        const active = Array.from(this.activeBrowsers.values());
+        await Promise.all(active.map(async ({ browser, syncCurrentCookies }) => {
+            await syncCurrentCookies().catch(() => {});
+            await browser.close().catch(() => {});
+        }));
     }
 }
 

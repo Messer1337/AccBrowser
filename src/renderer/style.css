@@ -161,6 +161,11 @@ body {
   text-align: center;
 }
 
+.status-error {
+    color: #fecaca !important;
+    border-color: #ef4444 !important;
+}
+
 .login-hint {
   margin-top: 24px;
   padding: 12px;
@@ -233,7 +238,11 @@ body {
 
 /* Admin Only visibility helper */
 .admin-only.hidden {
-  display: none !important;
+    display: none !important;
+}
+
+.hidden {
+    display: none !important;
 }
 
 /* Layout */
