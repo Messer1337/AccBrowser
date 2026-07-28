@@ -9,9 +9,17 @@
     "prebuild": "npm run clean",
     "prerelease": "npm run clean",
     "start": "electron .",
+    "start:emulators": "OASIS_USE_FIREBASE_EMULATORS=1 npx --yes firebase-tools@15.24.0 emulators:exec --project oasis-local --only auth,firestore,functions \"electron .\"",
+    "start:selfhosted": "OASIS_BACKEND=selfhosted electron .",
     "build": "electron-builder --mac --win",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
+    "test": "node tests/security-smoke.js",
+    "test:rules": "npx --yes firebase-tools@15.24.0 emulators:exec --project oasis-rules-test --only firestore \"node tests/firestore-rules.emulator.js\"",
+    "test:functions": "npm ci --prefix functions --ignore-scripts && npx --yes firebase-tools@15.24.0 emulators:exec --project oasis-functions-test --only auth,firestore,functions \"node tests/functions-emulator.e2e.js\"",
+    "test:selfhosted": "bash scripts/test-selfhosted.sh",
+    "test:syntax": "node --check src/config/firebase.js && node --check src/config/backend.js && node --check src/main/backend/provider.js && node --check src/main/backend/firebase-provider.js && node --check src/main/backend/selfhosted-provider.js && node --check src/main/index.js && node --check src/main/auth-manager.js && node --check src/main/sync-manager.js && node --check src/main/browser-launcher.js && node --check functions/index.js",
+    "verify": "npm run test:syntax && npm test && npm audit --package-lock-only --omit=dev",
     "release": "node scripts/extract-release-notes.js && GH_TOKEN=$(gh auth token 2>/dev/null || echo $GH_TOKEN) electron-builder --mac --win --publish always"
   },
   "build": {
@@ -68,21 +76,19 @@
     }
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
-    "electron-store": "^8.2.0",
     "electron-updater": "^6.8.9",
-    "fingerprint-generator": "^2.1.58",
-    "fingerprint-injector": "^2.1.58",
-    "firebase": "^10.12.0",
-    "fs-extra": "^11.2.0",
+    "fingerprint-generator": "^2.1.86",
+    "fingerprint-injector": "^2.1.86",
+    "firebase": "^12.16.0",
+    "fs-extra": "^11.4.0",
     "https-proxy-agent": "^9.1.0",
     "puppeteer-core": "^22.10.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "socket.io-client": "^4.8.3",
     "socks-proxy-agent": "^10.1.0"
   },
   "devDependencies": {
-    "electron": "^30.5.1",
-    "electron-builder": "^24.13.3"
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
   }
 }

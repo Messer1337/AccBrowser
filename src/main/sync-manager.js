@@ -1,18 +1,110 @@
-const { doc, getDoc, setDoc, deleteDoc, collection, getDocs, addDoc, query, orderBy, limit, onSnapshot } = require('firebase/firestore');
-const { getDb, isFirebaseConfigured } = require('../config/firebase');
+const { getBackendProvider } = require('../config/backend');
 const path = require('path');
 const fs = require('fs-extra');
-const os = require('os');
 const crypto = require('crypto');
 
+function getSafeStorage() {
+    try {
+        const electron = require('electron');
+        return electron && electron.safeStorage && typeof electron.safeStorage.isEncryptionAvailable === 'function'
+            ? electron.safeStorage
+            : null;
+    } catch (error) {
+        return null;
+    }
+}
+
 class SyncManager {
-    constructor(userDataPath) {
+    constructor(userDataPath, secretStorage = getSafeStorage()) {
         this.userDataPath = userDataPath;
         this.localStorageDir = path.join(userDataPath, 'local_db');
         fs.ensureDirSync(this.localStorageDir);
         this.activeSubscriptions = new Map();
         this.cookieHashes = new Map(); // profileId -> string hash
+        this.cloudProfileHashes = new Map(); // profileId -> serialized cloud payload hash
+        this.secretStorage = secretStorage;
+        this.localSecretsEncrypted = this.canEncryptLocalSecrets();
+        this.metricsFile = path.join(this.localStorageDir, 'sync_metrics.json');
         this.deviceId = this.initDeviceId();
+    }
+
+    canEncryptLocalSecrets() {
+        try {
+            return Boolean(this.secretStorage && this.secretStorage.isEncryptionAvailable());
+        } catch (error) {
+            return false;
+        }
+    }
+
+    encodeLocalProfile(profileData) {
+        const copy = JSON.parse(JSON.stringify(profileData));
+        if (!this.localSecretsEncrypted) return copy;
+        try {
+            copy.cookiesEncrypted = this.secretStorage.encryptString(JSON.stringify(copy.cookies || [])).toString('base64');
+            copy.localSecretsFormat = 'safeStorage-v1';
+            delete copy.cookies;
+            return copy;
+        } catch (error) {
+            throw new Error(`Не вдалося зашифрувати локальні cookies: ${error.message}`);
+        }
+    }
+
+    decodeLocalProfile(storedProfile) {
+        if (!storedProfile || typeof storedProfile !== 'object') return storedProfile;
+        if (!storedProfile.cookiesEncrypted) return storedProfile;
+        if (!this.localSecretsEncrypted) {
+            const error = new Error('Локальні cookies зашифровані системним keychain, але ключ недоступний у цьому середовищі.');
+            error.code = 'LOCAL_SECRET_UNAVAILABLE';
+            throw error;
+        }
+        try {
+            const cookies = JSON.parse(this.secretStorage.decryptString(Buffer.from(storedProfile.cookiesEncrypted, 'base64')));
+            if (!Array.isArray(cookies)) throw new Error('Розшифровані cookies мають некоректний формат.');
+            const { cookiesEncrypted, localSecretsFormat, ...profile } = storedProfile;
+            return { ...profile, cookies };
+        } catch (cause) {
+            const error = new Error(`Не вдалося розшифрувати локальні cookies: ${cause.message}`);
+            error.code = 'LOCAL_SECRET_UNAVAILABLE';
+            throw error;
+        }
+    }
+
+    async writeLocalProfile(filePath, profileData) {
+        await fs.writeJson(filePath, this.encodeLocalProfile(profileData), { spaces: 2 });
+    }
+
+    writeLocalProfileSync(filePath, profileData) {
+        fs.writeJsonSync(filePath, this.encodeLocalProfile(profileData), { spaces: 2 });
+    }
+
+    async readLocalProfile(filePath) {
+        return this.decodeLocalProfile(await fs.readJson(filePath));
+    }
+
+    async recordSyncMetric(profileId, metric, bytes = 0) {
+        const id = this.sanitizeProfileId(profileId);
+        const day = new Date().toISOString().slice(0, 10);
+        try {
+            const metrics = await fs.pathExists(this.metricsFile)
+                ? await fs.readJson(this.metricsFile)
+                : { version: 1, days: {} };
+            const daily = metrics.days[day] || { profiles: {}, listenerErrors: 0 };
+            const profile = daily.profiles[id] || { cloudWrites: 0, bytesSynced: 0, conflicts: 0, cloudErrors: 0 };
+            if (metric === 'listenerError') {
+                daily.listenerErrors += 1;
+            } else if (Object.hasOwn(profile, metric)) {
+                profile[metric] += 1;
+                if (metric === 'cloudWrites') profile.bytesSynced += Math.max(0, bytes);
+            }
+            daily.profiles[id] = profile;
+            metrics.days[day] = daily;
+            // Keep a compact 30-day operational window; metrics contain no session data.
+            const days = Object.keys(metrics.days).sort().reverse();
+            for (const oldDay of days.slice(30)) delete metrics.days[oldDay];
+            await fs.writeJson(this.metricsFile, metrics, { spaces: 2 });
+        } catch (error) {
+            console.warn('[SyncManager] Metrics write notice:', error.message);
+        }
     }
 
     initDeviceId() {
@@ -22,12 +114,16 @@ class SyncManager {
                 const data = fs.readJsonSync(deviceFile);
                 if (data.deviceId) return data.deviceId;
             }
-        } catch (e) {}
+        } catch (error) {
+            console.warn('[SyncManager] Device ID read notice:', error.message);
+        }
 
-        const newId = `${os.userInfo().username}_${crypto.randomUUID().slice(0, 8)}`;
+        const newId = `device_${crypto.randomUUID()}`;
         try {
             fs.writeJsonSync(deviceFile, { deviceId: newId }, { spaces: 2 });
-        } catch (e) {}
+        } catch (error) {
+            console.warn('[SyncManager] Device ID write notice:', error.message);
+        }
         return newId;
     }
 
@@ -46,41 +142,46 @@ class SyncManager {
     // Helper: Calculate hash of cookies array to avoid duplicate sync writes
     getCookiesHash(cookies) {
         if (!Array.isArray(cookies)) return '';
-        const cookieString = cookies.map(c => `${c.name}=${c.value};${c.domain};${c.path}`).sort().join('|');
-        return crypto.createHash('md5').update(cookieString).digest('hex');
+        const normalized = cookies.map(cookie => {
+            const ordered = {};
+            for (const key of Object.keys(cookie || {}).sort()) ordered[key] = cookie[key];
+            return ordered;
+        }).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+        return crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
     }
 
-    // Drop non-essential tracking cookies and cap payload size to stay well under Firestore's 1MB doc limit
-    trimCookiesForSync(cookies, maxBytes = 700000) {
+    hasCookieChanges(profileId, cookies) {
+        const id = this.sanitizeProfileId(profileId);
+        return this.cookieHashes.get(id) !== this.getCookiesHash(cookies);
+    }
+
+    getCloudProfileHash(profileData) {
+        return crypto.createHash('sha256').update(JSON.stringify(profileData)).digest('hex');
+    }
+
+    prepareCloudProfileData(profileData) {
+        // Leases are owned exclusively by the backend. A metadata save must never replay
+        // a stale local holder and release or steal an active browser session.
+        const { activeHolderChanged, activeHolder, ...dataToSync } = profileData;
+        dataToSync.cookies = this.validateCookiesForCloudSync(dataToSync.cookies);
+        return JSON.parse(JSON.stringify(dataToSync));
+    }
+
+    // Losing a session cookie is worse than delaying sync. Keep the full local state and
+    // reject an oversized cloud payload explicitly instead of silently dropping cookies.
+    validateCookiesForCloudSync(cookies, maxBytes = 700000) {
         if (!Array.isArray(cookies)) return [];
-
-        const TRACKING_PATTERNS = [
-            /^_ga/i, /^_gid$/i, /^_gat/i, /^_gcl_/i, /^_fbp$/i, /^_fbc$/i,
-            /^_uetsid$/i, /^_uetvid$/i, /^_hj/i, /^_clck$/i, /^_clsk$/i,
-            /^NID$/, /^ANID$/, /^DSID$/, /^IDE$/, /^test_cookie$/i,
-            /^_pin_unauth$/i, /^_ttp$/i, /^_tt_enable_cookie$/i
-        ];
-
-        let trimmed = cookies.filter(c => !TRACKING_PATTERNS.some(rx => rx.test(c.name || '')));
-
-        if (Buffer.byteLength(JSON.stringify(trimmed), 'utf8') <= maxBytes) {
-            return trimmed;
+        const bytes = Buffer.byteLength(JSON.stringify(cookies), 'utf8');
+        if (bytes > maxBytes) {
+            throw new Error(`Cookies профілю мають ${bytes} B і перевищують cloud-ліміт ${maxBytes} B. Сесію збережено локально, але не синхронізовано.`);
         }
-
-        // Still over budget — drop the largest-value cookies first (unlikely to be the actual session token)
-        trimmed = [...trimmed].sort((a, b) => (b.value || '').length - (a.value || '').length);
-        while (trimmed.length > 0 && Buffer.byteLength(JSON.stringify(trimmed), 'utf8') > maxBytes) {
-            trimmed.shift();
-        }
-        console.warn(`[SyncManager] Cookie payload exceeded ${maxBytes} bytes — trimmed to ${trimmed.length} cookies for cloud sync.`);
-        return trimmed;
+        return cookies;
     }
 
     // Save profile metadata & cookies with Hash optimization
-    async saveProfile(profile, currentUser = 'unknown_user') {
+    async saveProfile(profile, currentUser = 'unknown_user', { cloudMode = 'full' } = {}) {
         const id = this.sanitizeProfileId(profile.id);
         const newCookieHash = this.getCookiesHash(profile.cookies);
-        const prevCookieHash = this.cookieHashes.get(id);
 
         const profileData = {
             id,
@@ -90,7 +191,12 @@ class SyncManager {
             userAgent: profile.userAgent || '',
             timezone: profile.timezone || '',
             cookies: profile.cookies || [],
+            fingerprint: profile.fingerprint || null,
+            fingerprintHeaders: profile.fingerprintHeaders || {},
+            fingerprintUpdatedAt: profile.fingerprintUpdatedAt || null,
             activeHolder: profile.activeHolder || null,
+            revision: Number.isInteger(profile.revision) && profile.revision >= 0 ? profile.revision : 0,
+            updatedBy: profile.updatedBy || currentUser,
             updatedAt: profile.updatedAt || Date.now(),
             lastSyncUser: currentUser,
             lastSyncDevice: this.deviceId
@@ -98,24 +204,76 @@ class SyncManager {
 
         // 1. Always save locally
         const localFile = path.join(this.localStorageDir, `profile_${id}.json`);
-        await fs.writeJson(localFile, profileData, { spaces: 2 });
+        await this.writeLocalProfile(localFile, profileData);
+        this.cookieHashes.set(id, newCookieHash);
+        let cloudSyncError = null;
+        const provider = getBackendProvider();
 
-        // 2. Always sync profile & metadata to Firebase Cloud Firestore
-        if (isFirebaseConfigured()) {
+        // 2. Always sync profile & metadata to the backend
+        if (provider.isConfigured() && cloudMode === 'session') {
             try {
-                const db = getDb();
-                const profileRef = doc(db, 'profiles', id);
-                const { activeHolderChanged, ...dataToSync } = profileData;
-                dataToSync.cookies = this.trimCookiesForSync(dataToSync.cookies);
-                const cleanDataToSync = JSON.parse(JSON.stringify(dataToSync));
-                await setDoc(profileRef, cleanDataToSync, { merge: true });
-                this.cookieHashes.set(id, newCookieHash);
-                console.log(`[SyncManager] Profile '${profile.name}' (${id}) synced to Cloud Firestore.`);
+                const response = await provider.syncProfileSession(id, {
+                    deviceId: this.deviceId,
+                    cookies: profileData.cookies,
+                    expectedRevision: profileData.revision
+                });
+                profileData.revision = response.revision;
+                profileData.updatedAt = response.updatedAt;
+                profileData.updatedBy = response.updatedBy || currentUser;
+                await this.writeLocalProfile(localFile, profileData);
+                this.cloudProfileHashes.set(id, this.getCloudProfileHash(this.prepareCloudProfileData(profileData)));
+                await this.recordSyncMetric(id, 'cloudWrites', Buffer.byteLength(JSON.stringify(profileData.cookies), 'utf8'));
             } catch (error) {
-                console.error(`[SyncManager] Firestore sync failed for profile '${id}':`, error.message);
+                cloudSyncError = error.message;
+                await this.recordSyncMetric(id, error.code === 'failed-precondition' ? 'conflicts' : 'cloudErrors');
+                console.error(`[SyncManager] Protected session sync failed for profile '${id}':`, error.message);
+            }
+        } else if (provider.isConfigured() && cloudMode === 'full') {
+            try {
+                const cleanDataToSync = this.prepareCloudProfileData(profileData);
+                const result = await provider.saveProfileFull(id, cleanDataToSync, profileData.revision, currentUser);
+                profileData.revision = result.revision;
+                profileData.updatedBy = currentUser;
+                await this.writeLocalProfile(localFile, profileData);
+                this.cloudProfileHashes.set(id, this.getCloudProfileHash(this.prepareCloudProfileData(profileData)));
+                await this.recordSyncMetric(id, 'cloudWrites', Buffer.byteLength(JSON.stringify(profileData.cookies), 'utf8'));
+                console.log(`[SyncManager] Profile '${profile.name}' (${id}) synced to the backend at revision ${result.revision}.`);
+            } catch (error) {
+                cloudSyncError = error.message;
+                await this.recordSyncMetric(id, error.code === 'failed-precondition' ? 'conflicts' : 'cloudErrors');
+                console.error(`[SyncManager] Backend sync failed for profile '${id}':`, error.message);
             }
         }
-        return profileData;
+        return cloudSyncError ? { ...profileData, cloudSyncError } : profileData;
+    }
+
+    // The first device to claim a profile proposes its generated fingerprint. The backend
+    // stores it only once, so parallel devices converge on one identity.
+    async ensureProfileFingerprint(profile, currentUser = 'unknown_user') {
+        const id = this.sanitizeProfileId(profile.id);
+        await this.saveProfile(profile, currentUser, { cloudMode: 'local' });
+        const provider = getBackendProvider();
+        if (!provider.isConfigured()) return profile;
+
+        try {
+            const result = await provider.ensureProfileFingerprint(id, {
+                fingerprint: profile.fingerprint,
+                fingerprintHeaders: profile.fingerprintHeaders || {}
+            });
+            if (result && result.fingerprint) {
+                profile.fingerprint = result.fingerprint;
+                profile.fingerprintHeaders = result.fingerprintHeaders || {};
+                profile.fingerprintUpdatedAt = result.fingerprintUpdatedAt || profile.fingerprintUpdatedAt;
+                profile.revision = Number.isInteger(result.revision) ? result.revision : profile.revision;
+                profile.updatedAt = result.fingerprintUpdatedAt || profile.updatedAt;
+                await this.saveProfile(profile, currentUser, { cloudMode: 'local' });
+            }
+        } catch (error) {
+            // A locally persisted fingerprint is still preferable to a new random identity
+            // while an offline client waits for the protected backend endpoint to recover.
+            console.warn(`[SyncManager] Could not pin fingerprint for '${id}':`, error.message);
+        }
+        return profile;
     }
 
     // Update Active Holder when browser opens or closes
@@ -124,7 +282,13 @@ class SyncManager {
         const profile = await this.getProfile(id);
         if (!profile) return;
 
-        if (isLaunching) {
+        const provider = getBackendProvider();
+        if (provider.isConfigured()) {
+            const response = isLaunching
+                ? await provider.claimProfileLease(id, this.deviceId)
+                : await provider.releaseProfileLease(id, this.deviceId);
+            profile.activeHolder = response.activeHolder || null;
+        } else if (isLaunching) {
             profile.activeHolder = {
                 username,
                 deviceId: this.deviceId,
@@ -137,7 +301,16 @@ class SyncManager {
             }
         }
         profile.activeHolderChanged = true;
-        await this.saveProfile(profile, username);
+        await this.saveProfile(profile, username, { cloudMode: provider.isConfigured() ? 'local' : 'full' });
+        return profile.activeHolder;
+    }
+
+    async heartbeatProfileLease(profileId) {
+        const provider = getBackendProvider();
+        if (!provider.isConfigured()) return null;
+        const id = this.sanitizeProfileId(profileId);
+        const response = await provider.heartbeatProfileLease(id, this.deviceId);
+        return response.activeHolder || null;
     }
 
     // Fetch latest profile & cookies from Cloud or Local
@@ -149,17 +322,17 @@ class SyncManager {
 
         if (await fs.pathExists(localFile)) {
             try {
-                localData = await fs.readJson(localFile);
-            } catch (e) {}
+            localData = await this.readLocalProfile(localFile);
+        } catch (error) {
+            if (error.code === 'LOCAL_SECRET_UNAVAILABLE') throw error;
+        }
         }
 
-        if (isFirebaseConfigured()) {
+        const provider = getBackendProvider();
+        if (provider.isConfigured()) {
             try {
-                const db = getDb();
-                const profileRef = doc(db, 'profiles', id);
-                const docSnap = await getDoc(profileRef);
-                if (docSnap.exists()) {
-                    const cloudData = docSnap.data();
+                const cloudData = await provider.getProfile(id);
+                if (cloudData) {
                     const localCookieCount = (localData && Array.isArray(localData.cookies)) ? localData.cookies.length : 0;
                     const cloudCookieCount = (cloudData && Array.isArray(cloudData.cookies)) ? cloudData.cookies.length : 0;
                     const localTime = (localData && localData.updatedAt) ? localData.updatedAt : 0;
@@ -168,15 +341,16 @@ class SyncManager {
                     // Preserve local data if local has cookies and is newer or equal
                     if (!localData || (cloudCookieCount > 0 && cloudTime >= localTime) || (localCookieCount === 0 && cloudCookieCount > 0)) {
                         profileData = cloudData;
-                        await fs.writeJson(localFile, profileData, { spaces: 2 });
+                        await this.writeLocalProfile(localFile, profileData);
                     } else {
                         profileData = localData;
                     }
                     this.cookieHashes.set(id, this.getCookiesHash(profileData.cookies));
+                    this.cloudProfileHashes.set(id, this.getCloudProfileHash(this.prepareCloudProfileData(profileData)));
                     return profileData;
                 }
             } catch (error) {
-                console.warn(`[SyncManager] Could not fetch profile from Firestore:`, error.message);
+                console.warn(`[SyncManager] Could not fetch profile from the backend:`, error.message);
             }
         }
 
@@ -190,34 +364,31 @@ class SyncManager {
     // Live Real-Time Subscription for Parallel Multi-User Access
     subscribeToProfile(profileId, onRemoteUpdate) {
         const id = this.sanitizeProfileId(profileId);
-        if (!isFirebaseConfigured()) return () => {};
+        const provider = getBackendProvider();
+        if (!provider.isConfigured()) return () => {};
 
         if (this.activeSubscriptions.has(id)) {
             this.activeSubscriptions.get(id)();
         }
 
-        try {
-            const db = getDb();
-            const profileRef = doc(db, 'profiles', id);
-            const unsubscribe = onSnapshot(profileRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    // Ignore echo updates from local device ID
-                    if (data.lastSyncDevice !== this.deviceId) {
-                        console.log(`[SyncManager] Live remote update received for profile '${id}' from user '${data.lastSyncUser}'.`);
-                        onRemoteUpdate(data);
-                    }
+        const unsubscribe = provider.subscribeProfile(id, {
+            onUpdate: (data) => {
+                // Ignore echo updates from local device ID
+                if (data.lastSyncDevice !== this.deviceId) {
+                    this.cookieHashes.set(id, this.getCookiesHash(data.cookies));
+                    this.cloudProfileHashes.set(id, this.getCloudProfileHash(this.prepareCloudProfileData(data)));
+                    console.log(`[SyncManager] Live remote update received for profile '${id}' from user '${data.lastSyncUser}'.`);
+                    onRemoteUpdate(data);
                 }
-            }, (error) => {
+            },
+            onError: (error) => {
+                this.recordSyncMetric(id, 'listenerError');
                 console.warn(`[SyncManager] Real-time subscription error for profile '${id}':`, error.message);
-            });
+            }
+        });
 
-            this.activeSubscriptions.set(id, unsubscribe);
-            return unsubscribe;
-        } catch (e) {
-            console.warn(`[SyncManager] Failed to establish live subscription for profile '${id}':`, e.message);
-            return () => {};
-        }
+        this.activeSubscriptions.set(id, unsubscribe);
+        return unsubscribe;
     }
 
     unsubscribeProfile(profileId) {
@@ -229,19 +400,18 @@ class SyncManager {
     }
 
     subscribeToProfilesCollection(onProfilesUpdated) {
-        if (!isFirebaseConfigured()) return () => {};
+        const provider = getBackendProvider();
+        if (!provider.isConfigured()) return () => {};
         if (this.profilesCollectionUnsubscribe) {
             this.profilesCollectionUnsubscribe();
             this.profilesCollectionUnsubscribe = null;
         }
 
-        try {
-            const db = getDb();
-            const profilesRef = collection(db, 'profiles');
-            this.profilesCollectionUnsubscribe = onSnapshot(profilesRef, (snapshot) => {
+        this.profilesCollectionUnsubscribe = provider.subscribeProfilesCollection({
+            onDocChanges: (changes) => {
                 let changed = false;
-                snapshot.docChanges().forEach((change) => {
-                    const cloudData = change.doc.data();
+                changes.forEach((change) => {
+                    const cloudData = change.data;
                     if (cloudData && cloudData.id) {
                         const localFile = path.join(this.localStorageDir, `profile_${cloudData.id}.json`);
                         if (change.type === 'removed') {
@@ -251,27 +421,26 @@ class SyncManager {
                             }
                         } else if (change.type === 'added' || change.type === 'modified') {
                             if (cloudData.lastSyncDevice !== this.deviceId) {
-                                fs.writeJsonSync(localFile, cloudData, { spaces: 2 });
+                                this.writeLocalProfileSync(localFile, cloudData);
+                                this.cookieHashes.set(cloudData.id, this.getCookiesHash(cloudData.cookies));
+                                this.cloudProfileHashes.set(cloudData.id, this.getCloudProfileHash(this.prepareCloudProfileData(cloudData)));
                                 changed = true;
                             }
                         }
                     }
                 });
 
-                if (changed || snapshot.metadata.hasPendingWrites === false) {
-                    if (typeof onProfilesUpdated === 'function') {
-                        onProfilesUpdated();
-                    }
+                if (changed && typeof onProfilesUpdated === 'function') {
+                    onProfilesUpdated();
                 }
-            }, (error) => {
+            },
+            onError: (error) => {
+                this.recordSyncMetric('collection_listener', 'listenerError');
                 console.warn('[SyncManager] Real-time profiles collection subscription error:', error.message);
-            });
+            }
+        });
 
-            return this.profilesCollectionUnsubscribe;
-        } catch (e) {
-            console.warn('[SyncManager] Failed to establish live profiles collection subscription:', e.message);
-            return () => {};
-        }
+        return this.profilesCollectionUnsubscribe;
     }
 
     unsubscribeFromProfilesCollection() {
@@ -281,9 +450,13 @@ class SyncManager {
         }
     }
 
-    // List all profiles available (queries Cloud Firestore first if configured)
-    async listProfiles() {
+    // List profiles. Non-admin callers provide explicit allowed IDs because per-profile
+    // ACLs cannot safely be proven by a mixed-access collection query.
+    async listProfiles(allowedProfileIds = null) {
         const profilesMap = new Map();
+        const restrictedIds = Array.isArray(allowedProfileIds)
+            ? allowedProfileIds.map(id => this.sanitizeProfileId(id))
+            : null;
 
         // 1. Load local profiles first
         try {
@@ -291,22 +464,35 @@ class SyncManager {
             for (const file of files) {
                 if (file.startsWith('profile_') && file.endsWith('.json')) {
                     try {
-                        const data = await fs.readJson(path.join(this.localStorageDir, file));
+                        const data = await this.readLocalProfile(path.join(this.localStorageDir, file));
                         if (data && data.id) {
                             profilesMap.set(data.id, data);
                         }
-                    } catch (e) {}
+                    } catch (error) {
+                        console.warn('[SyncManager] Local profile read notice:', error.message);
+                    }
                 }
             }
-        } catch (e) {}
+        } catch (error) {
+            console.warn('[SyncManager] Local profile directory notice:', error.message);
+        }
 
-        // 2. Fetch from Cloud Firestore if configured
-        if (isFirebaseConfigured()) {
+        // 2. Workers fetch only their individually authorized documents. A collection query
+        // could not safely prove per-profile ACLs.
+        if (restrictedIds) {
+            for (const id of restrictedIds) {
+                const profile = await this.getProfile(id);
+                if (profile) profilesMap.set(id, profile);
+            }
+            return restrictedIds.map(id => profilesMap.get(id)).filter(Boolean);
+        }
+
+        // 3. Admins may fetch the complete backend collection.
+        const provider = getBackendProvider();
+        if (provider.isConfigured()) {
             try {
-                const db = getDb();
-                const querySnapshot = await getDocs(collection(db, 'profiles'));
-                querySnapshot.forEach((docSnap) => {
-                    const cloudData = docSnap.data();
+                const cloudProfiles = await provider.listProfiles();
+                cloudProfiles.forEach((cloudData) => {
                     if (cloudData && cloudData.id) {
                         const localData = profilesMap.get(cloudData.id);
                         const localTime = localData ? (localData.updatedAt || 0) : 0;
@@ -317,19 +503,21 @@ class SyncManager {
                         if (!localData || (cloudCookies > 0 && cloudTime >= localTime) || (localCookies === 0 && cloudCookies > 0)) {
                             profilesMap.set(cloudData.id, cloudData);
                             const localFile = path.join(this.localStorageDir, `profile_${cloudData.id}.json`);
-                            fs.writeJsonSync(localFile, cloudData, { spaces: 2 });
+                            this.writeLocalProfileSync(localFile, cloudData);
+                            this.cookieHashes.set(cloudData.id, this.getCookiesHash(cloudData.cookies));
+                            this.cloudProfileHashes.set(cloudData.id, this.getCloudProfileHash(this.prepareCloudProfileData(cloudData)));
                         }
                     }
                 });
             } catch (error) {
-                console.warn(`[SyncManager] Could not fetch profiles list from Firestore:`, error.message);
+                console.warn(`[SyncManager] Could not fetch profiles list from the backend:`, error.message);
             }
         }
 
         return Array.from(profilesMap.values());
     }
 
-    // Delete profile locally and in Firestore
+    // Delete profile locally and on the backend
     async deleteProfile(profileId) {
         const id = this.sanitizeProfileId(profileId);
         this.unsubscribeProfile(id);
@@ -338,14 +526,13 @@ class SyncManager {
             await fs.remove(localFile);
         }
 
-        if (isFirebaseConfigured()) {
+        const provider = getBackendProvider();
+        if (provider.isConfigured()) {
             try {
-                const db = getDb();
-                const profileRef = doc(db, 'profiles', id);
-                await deleteDoc(profileRef);
-                console.log(`[SyncManager] Profile '${id}' deleted from Cloud Firestore.`);
+                await provider.deleteProfile(id);
+                console.log(`[SyncManager] Profile '${id}' deleted from the backend.`);
             } catch (error) {
-                console.warn(`[SyncManager] Could not delete profile '${id}' from Firestore:`, error.message);
+                console.warn(`[SyncManager] Could not delete profile '${id}' from the backend:`, error.message);
             }
         }
     }
@@ -372,33 +559,30 @@ class SyncManager {
             logs.unshift(logEntry);
             if (logs.length > 200) logs = logs.slice(0, 200); // keep recent 200
             await fs.writeJson(logsFile, logs, { spaces: 2 });
-        } catch (e) {}
+        } catch (error) {
+            console.warn('[SyncManager] Local audit log write notice:', error.message);
+        }
 
-        // 2. Save to Cloud Firestore
-        if (isFirebaseConfigured()) {
+        // 2. Save to the backend
+        const provider = getBackendProvider();
+        if (provider.isConfigured()) {
             try {
-                const db = getDb();
-                await addDoc(collection(db, 'auditLogs'), logEntry);
+                await provider.logActivity(logEntry);
                 console.log(`[SyncManager] Audit log recorded: ${action} by ${username}`);
             } catch (error) {
-                console.warn('[SyncManager] Firestore audit log failed:', error.message);
+                console.warn('[SyncManager] Backend audit log failed:', error.message);
             }
         }
     }
 
     async getAuditLogs() {
-        if (isFirebaseConfigured()) {
+        const provider = getBackendProvider();
+        if (provider.isConfigured()) {
             try {
-                const db = getDb();
-                const q = query(collection(db, 'auditLogs'), orderBy('timestamp', 'desc'), limit(50));
-                const snapshot = await getDocs(q);
-                const cloudLogs = [];
-                snapshot.forEach(docSnap => {
-                    cloudLogs.push({ id: docSnap.id, ...docSnap.data() });
-                });
+                const cloudLogs = await provider.getAuditLogs(50);
                 if (cloudLogs.length > 0) return cloudLogs;
             } catch (error) {
-                console.warn('[SyncManager] Could not fetch audit logs from Firestore:', error.message);
+                console.warn('[SyncManager] Could not fetch audit logs from the backend:', error.message);
             }
         }
 
@@ -408,7 +592,9 @@ class SyncManager {
             if (await fs.pathExists(logsFile)) {
                 return await fs.readJson(logsFile);
             }
-        } catch (e) {}
+        } catch (error) {
+            console.warn('[SyncManager] Local audit log read notice:', error.message);
+        }
         return [];
     }
 }

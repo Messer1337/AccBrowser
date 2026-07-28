@@ -1,0 +1,28 @@
+{
+  "name": "oasis-selfhosted-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted backend for AccBrowser (OASIS Browser) — REST + Socket.IO alternative to Firebase.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "migrate": "node-pg-migrate up",
+    "bootstrap-admin": "node scripts/bootstrap-admin.js",
+    "test:syntax": "node --check src/app.js && node --check src/server.js && node --check src/db.js && node --check src/events.js && node --check src/validators.js && node --check src/auth/jwt.js && node --check src/auth/password.js && node --check src/auth/middleware.js && node --check src/routes/auth.js && node --check src/routes/team-users.js && node --check src/routes/profiles.js && node --check src/routes/audit-logs.js && node --check src/sockets/index.js && node --check scripts/bootstrap-admin.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-pg-migrate": "^7.9.1",
+    "pg": "^8.13.1",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.1",
+    "supertest": "^7.0.0"
+  }
+}

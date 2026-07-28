@@ -1,0 +1,4 @@
+{$OASIS_DOMAIN:localhost} {
+	# Handles both REST and the Socket.IO WebSocket upgrade transparently.
+	reverse_proxy api:3000
+}

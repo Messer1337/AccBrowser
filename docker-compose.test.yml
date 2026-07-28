@@ -1,0 +1,14 @@
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: oasis_test
+      POSTGRES_USER: oasis_test
+      POSTGRES_PASSWORD: oasis_test
+    ports:
+      - "55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oasis_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 20

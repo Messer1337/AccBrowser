@@ -8,22 +8,23 @@ if (process.env.OASIS_USER_DATA_DIR) {
     const customPath = path.resolve(process.env.OASIS_USER_DATA_DIR);
     app.setPath('userData', customPath);
 }
-const { initFirebase, isFirebaseConfigured } = require('../config/firebase');
+const { initBackend, getBackendProvider, getBackendMode } = require('../config/backend');
 const SyncManager = require('./sync-manager');
 const BrowserLauncher = require('./browser-launcher');
 const AuthManager = require('./auth-manager');
 const PreflightChecker = require('./preflight-checker');
+const { MAX_BACKUP_BYTES, validateCookiesPayload, validateProfilePayload } = require('./profile-validation');
 const { initAutoUpdater, registerUpdateIpc } = require('./auto-updater');
 
 let mainWindow = null;
 let syncManager = null;
 let browserLauncher = null;
 let authManager = null;
+let isQuitting = false;
 app.name = 'OASIS Browser';
 
 // AES-256-GCM export/import for profile backups, keyed by a password the admin supplies at export time.
 const BACKUP_PBKDF2_ITERATIONS = 100000;
-
 function encryptBackup(dataObj, password) {
     const salt = crypto.randomBytes(16);
     const iv = crypto.randomBytes(12);
@@ -77,10 +78,15 @@ function createWindow() {
         webPreferences: {
             preload: path.join(__dirname, '../preload/preload.js'),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            sandbox: true,
+            webSecurity: true
         }
     });
 
+    mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    mainWindow.webContents.on('will-navigate', (event) => event.preventDefault());
+    mainWindow.webContents.session.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 
     mainWindow.on('closed', () => {
@@ -90,12 +96,16 @@ function createWindow() {
 
 app.whenReady().then(async () => {
     app.setName('OASIS Browser');
-    initFirebase();
+    initBackend();
     const userDataPath = app.getPath('userData');
     authManager = new AuthManager(userDataPath);
     await authManager.restoreSession();
     syncManager = new SyncManager(userDataPath);
-    browserLauncher = new BrowserLauncher(userDataPath, syncManager);
+    browserLauncher = new BrowserLauncher(userDataPath, syncManager, (data) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('sync-error', data);
+        }
+    });
 
     authManager.onForceLogout((data) => {
         syncManager.unsubscribeFromProfilesCollection();
@@ -155,7 +165,7 @@ app.whenReady().then(async () => {
             return { ok: false, stage: 'proxy', error: proxyCheck.error };
         }
 
-        const urlCheck = await PreflightChecker.checkUrlAccessibility(profile.url);
+        const urlCheck = await PreflightChecker.checkUrlAccessibility(profile.url, profile.proxy);
         if (!urlCheck.ok) {
             return { ok: false, stage: 'url', error: urlCheck.error };
         }
@@ -164,9 +174,17 @@ app.whenReady().then(async () => {
     });
 
     // IPC Handlers: Auth
+    ipcMain.handle('get-initial-setup-status', async () => ({
+        needsSetup: authManager.needsInitialSetup()
+    }));
+
+    ipcMain.handle('setup-initial-admin', async (event, password) => {
+        return authManager.setupInitialAdmin(password);
+    });
+
     ipcMain.handle('login', async (event, username, password) => {
         const result = await authManager.login(username, password);
-        if (result && result.success) {
+        if (result && result.success && result.user && (result.user.role === 'admin' || (result.user.allowedProfiles || []).includes('*'))) {
             startProfilesSync();
         }
         return result;
@@ -208,7 +226,9 @@ app.whenReady().then(async () => {
         const currentUser = authManager.getCurrentUser();
         if (!currentUser) return { profiles: [], totalCount: 0, allowedCount: 0 };
 
-        const allProfiles = await syncManager.listProfiles();
+        const allProfiles = currentUser.role === 'admin' || (currentUser.allowedProfiles && currentUser.allowedProfiles.includes('*'))
+            ? await syncManager.listProfiles()
+            : await syncManager.listProfiles(currentUser.allowedProfiles || []);
         const allowedProfiles = allProfiles.filter(p => authManager.canAccessProfile(p.id));
 
         return {
@@ -248,12 +268,27 @@ app.whenReady().then(async () => {
         if (!currentUser || currentUser.role !== 'admin') {
             throw new Error('Тільки адміністратор може редагувати або створювати профілі.');
         }
-        const result = await syncManager.saveProfile(profile, currentUser.username);
+        const validatedProfile = validateProfilePayload(profile, PreflightChecker.parseProxy);
+        const existingProfile = await syncManager.getProfile(validatedProfile.id);
+        if (existingProfile) {
+            if (!Object.prototype.hasOwnProperty.call(validatedProfile, 'cookies') && Array.isArray(existingProfile.cookies)) {
+                validatedProfile.cookies = existingProfile.cookies;
+            }
+            // Renderer forms are intentionally unable to edit operational state. Preserve it
+            // so a metadata edit cannot clear a lease, stable fingerprint, or revision token.
+            validatedProfile.activeHolder = existingProfile.activeHolder || null;
+            validatedProfile.fingerprint = existingProfile.fingerprint || null;
+            validatedProfile.fingerprintHeaders = existingProfile.fingerprintHeaders || {};
+            validatedProfile.fingerprintUpdatedAt = existingProfile.fingerprintUpdatedAt || null;
+            validatedProfile.revision = Number.isInteger(existingProfile.revision) ? existingProfile.revision : 0;
+            validatedProfile.updatedBy = existingProfile.updatedBy || currentUser.username;
+        }
+        const result = await syncManager.saveProfile(validatedProfile, currentUser.username);
         await syncManager.logActivity({
             action: 'Збереження профілю',
             username: currentUser.username,
-            profileId: profile.id,
-            profileName: profile.name
+            profileId: validatedProfile.id,
+            profileName: validatedProfile.name
         });
         return result;
     });
@@ -320,7 +355,7 @@ app.whenReady().then(async () => {
         let parsed = [];
         try {
             parsed = typeof cookiesJson === 'string' ? JSON.parse(cookiesJson) : cookiesJson;
-            if (!Array.isArray(parsed)) throw new Error('Кукі мають бути масивом JSON.');
+            validateCookiesPayload(parsed);
         } catch (e) {
             throw new Error('Некоректний формат JSON куків: ' + e.message);
         }
@@ -330,8 +365,8 @@ app.whenReady().then(async () => {
 
         profile.cookies = parsed;
         profile.updatedAt = Date.now();
-        await syncManager.saveProfile(profile, currentUser.username);
-        return { success: true, count: parsed.length };
+        const saved = await syncManager.saveProfile(profile, currentUser.username);
+        return { success: !saved.cloudSyncError, localSaved: true, count: parsed.length, warning: saved.cloudSyncError || null };
     });
 
     ipcMain.handle('export-profiles', async (event, password) => {
@@ -374,6 +409,10 @@ app.whenReady().then(async () => {
         });
         if (canceled || !filePaths || filePaths.length === 0) return { success: false, message: 'Скасовано.' };
 
+        const fileStat = await fs.stat(filePaths[0]);
+        if (fileStat.size > MAX_BACKUP_BYTES) {
+            throw new Error('Файл бекапу перевищує ліміт 25 MB.');
+        }
         const fileContent = await fs.readFile(filePaths[0], 'utf8');
         let backup;
         try {
@@ -382,12 +421,12 @@ app.whenReady().then(async () => {
             throw new Error('Не вдалося розшифрувати файл — невірний пароль або пошкоджений файл.');
         }
 
-        if (!backup || !Array.isArray(backup.profiles)) {
+        if (!backup || !Array.isArray(backup.profiles) || backup.profiles.length > 500) {
             throw new Error('Некоректний формат файлу бекапу.');
         }
 
         for (const profile of backup.profiles) {
-            await syncManager.saveProfile(profile, currentUser.username);
+            await syncManager.saveProfile(validateProfilePayload(profile, PreflightChecker.parseProxy), currentUser.username);
         }
 
         await syncManager.logActivity({
@@ -408,9 +447,10 @@ app.whenReady().then(async () => {
     });
 
     ipcMain.handle('get-sync-status', async () => {
+        const provider = getBackendProvider();
         return {
-            isCloudConfigured: isFirebaseConfigured(),
-            mode: isFirebaseConfigured() ? 'Firebase Cloud Sync' : 'Локальний режим'
+            isCloudConfigured: provider.isConfigured(),
+            mode: provider.getMode()
         };
     });
 
@@ -419,8 +459,11 @@ app.whenReady().then(async () => {
         if (!currentUser || currentUser.role !== 'admin') {
             throw new Error('Тільки адміністратор може змінювати налаштування Firebase.');
         }
-        initFirebase(config);
-        return { success: true, isConfigured: isFirebaseConfigured() };
+        if (getBackendMode() !== 'firebase') {
+            throw new Error('Ця дія доступна лише в режимі Firebase. Застосунок налаштований на власний сервер (OASIS_BACKEND=selfhosted).');
+        }
+        initBackend(config);
+        return { success: true, isConfigured: getBackendProvider().isConfigured() };
     });
 
     ipcMain.handle('delete-user', async (event, username) => {
@@ -443,4 +486,15 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') app.quit();
+});
+
+// Flush cookies while Chrome's CDP connection is still alive on a normal application exit.
+// The guard prevents Electron's second `before-quit` emission from creating a quit loop.
+app.on('before-quit', (event) => {
+    if (isQuitting || !browserLauncher) return;
+    isQuitting = true;
+    event.preventDefault();
+    browserLauncher.shutdown()
+        .catch(error => console.warn('[Main] Browser shutdown flush warning:', error.message))
+        .finally(() => app.quit());
 });
