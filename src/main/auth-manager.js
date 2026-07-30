@@ -228,7 +228,8 @@ class AuthManager {
                 uid: result.uid,
                 role: result.role,
                 allowedProfiles: result.allowedProfiles,
-                firebaseUid: result.firebaseUid
+                firebaseUid: result.firebaseUid,
+                mustChangePassword: result.mustChangePassword
             };
         } catch (err) {
             const isMissingOrDenied = err.code === 'not-found' || err.code === 'permission-denied';
@@ -353,12 +354,17 @@ class AuthManager {
                     found.allowedProfiles = syncResult.allowedProfiles || found.allowedProfiles;
                     found.firebaseUid = syncResult.firebaseUid || found.firebaseUid;
                     found.cloudAuthorized = true;
+                    // The backend is authoritative here (e.g. a migrated account carrying a
+                    // temporary password) — only fall back to the local flag when the
+                    // backend didn't report one at all.
+                    if (syncResult.mustChangePassword !== undefined) found.mustChangePassword = syncResult.mustChangePassword;
                     fs.writeJsonSync(this.usersFile, users, { spaces: 2 });
 
                     this.currentUser.role = found.role;
                     this.currentUser.allowedProfiles = found.allowedProfiles;
                     this.currentUser.firebaseUid = found.firebaseUid;
                     this.currentUser.cloudAuthorized = true;
+                    this.currentUser.mustChangePassword = found.mustChangePassword;
                     console.log(`[AuthManager] Synced role and profiles for '${username}' from the backend.`);
                 } else {
                     console.log(`[AuthManager] '${username}' has no backend record yet — continuing with local-only login.`);
@@ -398,7 +404,10 @@ class AuthManager {
                 }
 
                 localUser.passwordHash = this.hashPassword(password);
-                localUser.mustChangePassword = false;
+                // Not hardcoded false: a migrated account logging in for the first time on
+                // a new device with its distributed temporary password must still be forced
+                // to set a real one, even though that temporary password just verified fine.
+                localUser.mustChangePassword = Boolean(syncResult.mustChangePassword);
                 localUser.firebaseUid = syncResult.firebaseUid || syncResult.uid;
                 localUser.cloudAuthorized = syncResult.cloudAuthorized;
 

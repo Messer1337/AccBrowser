@@ -113,6 +113,26 @@ test('a second device cannot claim a lease already held by another live device',
     assert.equal(res.status, 409);
 });
 
+test('login reports mustChangePassword for a migrated/temp-password account', async () => {
+    const now = Date.now();
+    await pool.query(
+        'INSERT INTO users (username, role, allowed_profiles, password_hash, must_change_password, created_at, updated_at) VALUES ($1,$2,$3,$4,true,$5,$5)',
+        ['migrated', 'user', JSON.stringify(['profile_a']), hashPassword('TempPassword123!'), now]
+    );
+    const res = await request(app).post('/api/auth/login').send({ username: 'migrated', password: 'TempPassword123!' });
+    assert.equal(res.status, 200);
+    assert.equal(res.body.user.mustChangePassword, true);
+
+    const changed = await request(app).post('/api/auth/change-password')
+        .set('Authorization', `Bearer ${res.body.token}`)
+        .send({ newPassword: 'BrandNewPassword123!' });
+    assert.equal(changed.status, 200);
+
+    const relogin = await request(app).post('/api/auth/login').send({ username: 'migrated', password: 'BrandNewPassword123!' });
+    assert.equal(relogin.status, 200);
+    assert.equal(relogin.body.user.mustChangePassword, false);
+});
+
 test('a revoked user is rejected on the very next login attempt', async () => {
     const adminToken = await loginAs('admin', 'AdminPassword123!');
     const del = await request(app).delete('/api/team-users/worker').set('Authorization', `Bearer ${adminToken}`);

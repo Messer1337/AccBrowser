@@ -1,0 +1,16 @@
+{
+  "name": "oasis-firebase-migration",
+  "version": "1.0.0",
+  "private": true,
+  "description": "One-off tool: copy existing Firestore data (profiles, teamUsers, auditLogs) into the self-hosted Postgres schema.",
+  "main": "migrate.js",
+  "scripts": {
+    "migrate": "node migrate.js",
+    "migrate:dry-run": "node migrate.js --dry-run",
+    "test:syntax": "node --check migrate.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.2",
+    "pg": "^8.13.1"
+  }
+}

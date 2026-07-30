@@ -40,6 +40,30 @@ services:
     depends_on:
       - api
 
+  # Daily pg_dump with automatic rotation (7 daily / 4 weekly / 6 monthly). Writes to a
+  # host bind mount rather than a Docker volume specifically so an admin can point a
+  # regular off-box sync (rsync/rclone/cloud-drive client) at ./backups directly — a
+  # local-only backup protects against DB corruption or a bad migration, but not against
+  # losing the whole host, so it needs to leave the box on its own schedule too.
+  postgres-backup:
+    image: prodrigestivill/postgres-backup-local:16-alpine
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./backups:/backups
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-oasis}
+      POSTGRES_USER: ${POSTGRES_USER:-oasis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      SCHEDULE: "@daily"
+      BACKUP_KEEP_DAYS: 7
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+      HEALTHCHECK_PORT: 8080
+
 volumes:
   pg_data:
   caddy_data:

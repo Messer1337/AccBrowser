@@ -33,7 +33,9 @@ const UNSET = Symbol('backend-provider-unset-field');
  * getMode(): string                          // UI display string
  *
  * -- auth --
- * login(username, password): Promise<{ authenticated: false } | { authenticated: true, uid: string, role: string, allowedProfiles: string[], firebaseUid: string }>
+ * login(username, password): Promise<{ authenticated: false } | { authenticated: true, uid: string, role: string, allowedProfiles: string[], firebaseUid: string, mustChangePassword?: boolean }>
+ *   mustChangePassword is only meaningful for SelfHostedProvider (e.g. a migrated account
+ *   carrying a distributed temporary password); FirebaseProvider never sets it.
  *   Never throws for "could not authenticate this attempt" (offline / stale local
  *   password / not yet provisioned) — resolves { authenticated: false } and the caller
  *   keeps using cached local data. Throws a backendError('not-found'|'permission-denied', ...)

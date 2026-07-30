@@ -82,6 +82,19 @@ class SelfHostedProvider {
         this.socket.on('connect_error', (error) => {
             console.warn('[SelfHostedProvider] Socket connection error:', error.message);
         });
+        // Room membership lives on the server-side socket connection, not the client
+        // object. socket.io-client auto-reconnects after a dropped connection (laptop
+        // sleep, wifi flicker) but that reconnection is a brand-new server-side socket
+        // with no rooms joined — without replaying subscriptions here, live sync would
+        // silently go dead until the app restarts.
+        this.socket.on('connect', () => {
+            for (const profileId of this.socketSubscribers.profile.keys()) {
+                this.socket.emit('subscribe:profile', { profileId });
+            }
+            if (this.socketSubscribers.profiles.size > 0) {
+                this.socket.emit('subscribe:profiles');
+            }
+        });
     }
 
     // Authenticates directly against the self-hosted server (which owns password
@@ -102,7 +115,8 @@ class SelfHostedProvider {
                 uid: result.user.uid,
                 role: result.user.role,
                 allowedProfiles: result.user.allowedProfiles,
-                firebaseUid: result.user.uid
+                firebaseUid: result.user.uid,
+                mustChangePassword: Boolean(result.user.mustChangePassword)
             };
         } catch (err) {
             if (err.code === ERROR_CODES.NOT_FOUND) throw err;

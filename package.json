@@ -5,7 +5,7 @@
   "author": "OASIS Team",
   "main": "src/main/index.js",
   "scripts": {
-    "clean": "rm -rf dist hosting_updates",
+    "clean": "node -e \"const fs=require('fs'); ['dist','hosting_updates'].forEach(d=>fs.rmSync(d,{recursive:true,force:true}))\"",
     "prebuild": "npm run clean",
     "prerelease": "npm run clean",
     "start": "electron .",

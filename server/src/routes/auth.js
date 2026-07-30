@@ -20,7 +20,12 @@ router.post('/login', async (req, res, next) => {
         const token = sign(user.username);
         res.json({
             token,
-            user: { uid: user.username, role: user.role, allowedProfiles: user.allowed_profiles }
+            user: {
+                uid: user.username,
+                role: user.role,
+                allowedProfiles: user.allowed_profiles,
+                mustChangePassword: user.must_change_password
+            }
         });
     } catch (err) { next(err); }
 });

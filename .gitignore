@@ -14,6 +14,10 @@ reference/
 # Local database & profiles storage (contains user session cookies & tokens)
 local_db/
 profiles/
+
+# Self-hosted server: local Postgres backup dumps (contain every team account,
+# profile, cookie, and audit log — never commit these)
+/backups/
 *.json
 !package.json
 !package-lock.json
