@@ -28,12 +28,21 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
     try {
         const username = normalizeUsername(req.body.username);
-        const role = validateRole(req.body.role || 'user');
+        const requestedRole = (req.body.role || 'user').toLowerCase();
+        if (requestedRole === 'admin') {
+            throw new HttpError(400, 'Існує лише один адміністратор. Створення додаткових адміністраторів заборонено.');
+        }
+
+        const role = 'user';
         const allowedProfiles = normalizeAllowedProfiles(req.body.allowedProfiles || [], role);
         const password = req.body.password;
 
-        const { rows } = await pool.query('SELECT username FROM users WHERE username = $1', [username]);
+        const { rows } = await pool.query('SELECT username, role FROM users WHERE username = $1', [username]);
         const exists = rows.length > 0;
+        if (exists && rows[0].role === 'admin') {
+            throw new HttpError(400, 'Обліковий запис адміністратора є унікальним і не може бути змінений через управління користувачами.');
+        }
+
         if (!exists && typeof password !== 'string') {
             throw new HttpError(400, 'Для нового користувача потрібен пароль.');
         }

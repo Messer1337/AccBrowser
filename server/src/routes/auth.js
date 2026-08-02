@@ -1,4 +1,5 @@
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const { pool } = require('../db');
 const { hashPassword, verifyPassword } = require('../auth/password');
 const { sign } = require('../auth/jwt');
@@ -7,7 +8,15 @@ const { HttpError } = require('../validators');
 
 const router = express.Router();
 
-router.post('/login', async (req, res, next) => {
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 15,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Забагато спроб входу. Зачекайте 15 хвилин.' }
+});
+
+router.post('/login', loginLimiter, async (req, res, next) => {
     try {
         const { username, password } = req.body || {};
         if (typeof username !== 'string' || typeof password !== 'string') {

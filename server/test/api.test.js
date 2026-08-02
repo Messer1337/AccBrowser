@@ -105,12 +105,12 @@ test('an oversized fingerprint payload is rejected', async () => {
     assert.equal(res.status, 413);
 });
 
-test('a second device cannot claim a lease already held by another live device', async () => {
+test('multiple devices can claim leases concurrently on the same profile', async () => {
     const token = await loginAs('worker', 'WorkerPassword123!');
     const res = await request(app).post('/api/profiles/profile_a/lease/claim')
         .set('Authorization', `Bearer ${token}`)
         .send({ deviceId: 'device_cccccccc' });
-    assert.equal(res.status, 409);
+    assert.equal(res.status, 200);
 });
 
 test('login reports mustChangePassword for a migrated/temp-password account', async () => {
@@ -140,4 +140,26 @@ test('a revoked user is rejected on the very next login attempt', async () => {
 
     const res = await request(app).post('/api/auth/login').send({ username: 'worker', password: 'WorkerPassword123!' });
     assert.equal(res.status, 404);
+});
+
+test('admin cannot create a secondary admin account via team-users', async () => {
+    const adminToken = await loginAs('admin', 'AdminPassword123!');
+    const res = await request(app).post('/api/team-users')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ username: 'admin2', role: 'admin', password: 'SecondAdmin123!' });
+    assert.equal(res.status, 400);
+});
+
+test('worker can list allowed profiles without passing ids parameter', async () => {
+    const adminToken = await loginAs('admin', 'AdminPassword123!');
+    await request(app).post('/api/team-users')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ username: 'worker2', role: 'user', allowedProfiles: ['profile_a'], password: 'WorkerTwoPassword123!' });
+
+    const workerToken = await loginAs('worker2', 'WorkerTwoPassword123!');
+    const res = await request(app).get('/api/profiles').set('Authorization', `Bearer ${workerToken}`);
+    assert.equal(res.status, 200);
+    assert.equal(Array.isArray(res.body.profiles), true);
+    assert.equal(res.body.profiles.length, 1);
+    assert.equal(res.body.profiles[0].id, 'profile_a');
 });

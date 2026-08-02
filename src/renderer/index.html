@@ -36,20 +36,8 @@
         <div class="login-error" id="login-error"></div>
         <button type="submit" class="btn btn-primary btn-block">Увійти в систему</button>
       </form>
-      <form id="form-initial-setup" class="hidden">
-        <div class="form-group">
-          <label for="initial-admin-password">Пароль першого адміністратора</label>
-          <input type="password" id="initial-admin-password" placeholder="Щонайменше 12 символів" required minlength="12" maxlength="256" />
-        </div>
-        <div class="form-group">
-          <label for="initial-admin-password-confirm">Підтвердження пароля</label>
-          <input type="password" id="initial-admin-password-confirm" placeholder="Повторіть пароль" required minlength="12" maxlength="256" />
-        </div>
-        <div class="login-error" id="initial-setup-error"></div>
-        <button type="submit" class="btn btn-primary btn-block">Створити адміністратора</button>
-      </form>
       <div class="login-hint" id="login-hint">
-        <small>💡 Під час першого запуску створіть надійний пароль для облікового запису <code>admin</code>.</small>
+        <small>💡 Введіть ім'я користувача та пароль для входу в систему.</small>
       </div>
     </div>
   </div>
@@ -187,6 +175,11 @@
           <label for="profile-proxy">Проксі (обов'язково для антидетекту)</label>
           <input type="text" id="profile-proxy" placeholder="ip:port:user:pass або user:pass@ip:port" />
           <small>⚠️ Проксі має відповідати цільовому регіону акаунта (наприклад, US/DE)</small>
+        </div>
+        <div class="form-group">
+          <label for="profile-proxy-rotate-url">URL зміни IP (Мобільний проксі, опціонально)</label>
+          <input type="url" id="profile-proxy-rotate-url" placeholder="https://change-ip.proxy-provider.com/rotate?token=..." />
+          <small>💡 Посилання від провайдера для примусової зміни IP-адреси в 1 клік</small>
         </div>
         <div class="form-group">
           <label for="profile-ua">User-Agent (опціонально)</label>

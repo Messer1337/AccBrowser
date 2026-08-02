@@ -109,6 +109,9 @@ function validateProfileData(data) {
     if (data.proxy !== undefined && data.proxy !== null && (typeof data.proxy !== 'string' || data.proxy.length > 4096)) {
         throw new HttpError(400, 'Некоректний proxy.');
     }
+    if (data.proxyRotateUrl !== undefined && data.proxyRotateUrl !== null && (typeof data.proxyRotateUrl !== 'string' || data.proxyRotateUrl.length > 4096)) {
+        throw new HttpError(400, 'Некоректний URL ротації проксі.');
+    }
     if (data.userAgent !== undefined && data.userAgent !== null && (typeof data.userAgent !== 'string' || data.userAgent.length > 2048)) {
         throw new HttpError(400, 'Некоректний userAgent.');
     }

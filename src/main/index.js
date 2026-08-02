@@ -173,6 +173,17 @@ app.whenReady().then(async () => {
         return { ok: true, message: 'Всі тести пройдено! Профіль готовий до запуску.' };
     });
 
+    ipcMain.handle('rotate-proxy-ip', async (event, profileId) => {
+        if (!authManager.canAccessProfile(profileId)) {
+            return { ok: false, error: 'Доступ заборонено.' };
+        }
+        const profile = await syncManager.getProfile(profileId);
+        if (!profile) return { ok: false, error: 'Профіль не знайдено.' };
+        if (!profile.proxyRotateUrl) return { ok: false, error: 'У цього профілю не налаштовано URL ротації IP.' };
+
+        return PreflightChecker.rotateProxyIp(profile.proxyRotateUrl, profile.proxy);
+    });
+
     // IPC Handlers: Auth
     ipcMain.handle('get-initial-setup-status', async () => ({
         needsSetup: authManager.needsInitialSetup()

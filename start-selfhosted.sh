@@ -6,7 +6,10 @@ export OASIS_SELFHOSTED_URL="http://152.53.224.55:3300"
 echo "Launching OASIS Browser in Self-Hosted Mode..."
 echo "Server endpoint: $OASIS_SELFHOSTED_URL"
 
-if [ -d "dist/mac/OASIS Browser.app" ]; then
+ARCH="$(uname -m)"
+if [ "$ARCH" = "arm64" ] && [ -d "dist/mac-arm64/OASIS Browser.app" ]; then
+    open "dist/mac-arm64/OASIS Browser.app"
+elif [ -d "dist/mac/OASIS Browser.app" ]; then
     open "dist/mac/OASIS Browser.app"
 elif [ -d "dist/mac-arm64/OASIS Browser.app" ]; then
     open "dist/mac-arm64/OASIS Browser.app"
@@ -15,3 +18,4 @@ elif command -v open >/dev/null 2>&1; then
 else
     npm start
 fi
+

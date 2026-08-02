@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const profileNameInput = document.getElementById('profile-name');
   const profileUrlInput = document.getElementById('profile-url');
   const profileProxyInput = document.getElementById('profile-proxy');
+  const profileProxyRotateUrlInput = document.getElementById('profile-proxy-rotate-url');
   const profileUaInput = document.getElementById('profile-ua');
   const profileTimezoneInput = document.getElementById('profile-timezone');
 
@@ -108,15 +109,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Check Auth State
   async function checkAuth() {
-    const setupStatus = await window.api.getInitialSetupStatus();
-    if (setupStatus.needsSetup) {
-      formLogin.classList.add('hidden');
-      formInitialSetup.classList.remove('hidden');
-      loginHint.classList.remove('hidden');
-      loginOverlay.classList.add('active');
-      return;
-    }
-    formInitialSetup.classList.add('hidden');
+    if (formInitialSetup) formInitialSetup.classList.add('hidden');
     formLogin.classList.remove('hidden');
     loginHint.classList.remove('hidden');
     currentUser = await window.api.getCurrentUser();
@@ -184,23 +177,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Handle Login Form Submit
-  formInitialSetup.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    initialSetupError.textContent = '';
-    if (initialAdminPassword.value !== initialAdminPasswordConfirm.value) {
-      initialSetupError.textContent = 'Паролі не збігаються';
-      return;
-    }
-    try {
-      await window.api.setupInitialAdmin(initialAdminPassword.value);
-      initialAdminPassword.value = '';
-      initialAdminPasswordConfirm.value = '';
-      await checkAuth();
-    } catch (err) {
-      initialSetupError.textContent = err.message || 'Не вдалося створити адміністратора';
-    }
-  });
-
   formLogin.addEventListener('submit', async (e) => {
     e.preventDefault();
     loginError.textContent = '';
@@ -285,6 +261,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           <button class="btn btn-secondary btn-icon btn-delete" data-id="${p.id}" title="Видалити">🗑</button>
         ` : '';
 
+        const rotateButtonHTML = p.proxyRotateUrl && p.proxyRotateUrl.trim() !== '' ? `
+          <button class="btn btn-secondary btn-icon btn-rotate" data-id="${p.id}" title="Оновити IP (Ротація мобільного проксі)">🔄</button>
+        ` : '';
+
         card.innerHTML = `
           <div>
             <div class="card-header">
@@ -299,6 +279,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           </div>
           <div class="card-actions">
             <button class="btn btn-secondary btn-icon btn-test" data-id="${p.id}" title="Автотест підключення">🔍</button>
+            ${rotateButtonHTML}
             <button class="btn btn-secondary btn-icon btn-warmup" data-id="${p.id}" title="Авто-прогрів акаунта (набір куків & trust score)">🔥</button>
             <button class="btn btn-primary btn-launch" data-id="${p.id}">
               ${p.isRunning ? 'Відкрито' : '▶ Запустити'}
@@ -308,6 +289,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         `;
 
         profilesContainer.appendChild(card);
+      });
+
+      // Bind IP Rotation Buttons
+      document.querySelectorAll('.btn-rotate').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          const id = e.target.getAttribute('data-id');
+          btn.disabled = true;
+          const origText = btn.textContent;
+          btn.textContent = '⏳';
+          try {
+            const result = await window.api.rotateProxyIp(id);
+            if (result.ok) {
+              alert(`✅ ${result.message}`);
+              loadProfiles();
+            } else {
+              alert(`❌ Помилка ротації IP: ${result.error}`);
+            }
+          } catch (err) {
+            alert('❌ [ПОМИЛКА РОТАЦІЇ IP]: ' + err.message);
+          } finally {
+            btn.disabled = false;
+            btn.textContent = origText;
+          }
+        });
       });
 
       // Bind Preflight Test Buttons
@@ -405,6 +410,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             profileNameInput.value = profile.name || '';
             profileUrlInput.value = profile.url || '';
             profileProxyInput.value = profile.proxy || '';
+            if (profileProxyRotateUrlInput) profileProxyRotateUrlInput.value = profile.proxyRotateUrl || '';
             profileUaInput.value = profile.userAgent || '';
             profileTimezoneInput.value = profile.timezone || '';
             document.getElementById('modal-title').textContent = 'Редагувати Профіль';
@@ -435,6 +441,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     profileNameInput.value = '';
     profileUrlInput.value = 'https://chatgpt.com';
     profileProxyInput.value = '';
+    if (profileProxyRotateUrlInput) profileProxyRotateUrlInput.value = '';
     profileUaInput.value = '';
     profileTimezoneInput.value = '';
     document.getElementById('modal-title').textContent = 'Створити Профіль';
@@ -528,6 +535,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       name: profileNameInput.value,
       url: profileUrlInput.value,
       proxy: profileProxyInput.value,
+      proxyRotateUrl: profileProxyRotateUrlInput ? profileProxyRotateUrlInput.value.trim() : '',
       userAgent: profileUaInput.value,
       timezone: profileTimezoneInput.value,
       updatedAt: Date.now()

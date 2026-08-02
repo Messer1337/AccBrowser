@@ -73,6 +73,48 @@ class PreflightChecker {
         };
     }
 
+    static async rotateProxyIp(rotateUrl, proxyStr) {
+        if (!rotateUrl || rotateUrl.trim() === '') {
+            return { ok: false, error: 'URL ротації IP не вказано.' };
+        }
+        let parsedTarget;
+        try {
+            parsedTarget = new URL(rotateUrl.trim());
+        } catch (e) {
+            return { ok: false, error: 'Некоректний URL ротації проксі.' };
+        }
+
+        try {
+            await new Promise((resolve, reject) => {
+                const client = parsedTarget.protocol === 'https:' ? https : http;
+                const req = client.get(parsedTarget, { timeout: 10000 }, (res) => {
+                    res.resume();
+                    resolve();
+                });
+                req.on('error', err => reject(err));
+                req.on('timeout', () => {
+                    req.destroy();
+                    reject(new Error('Час очікування ротації IP вичерпано (10s).'));
+                });
+            });
+        } catch (err) {
+            return { ok: false, error: `Помилка виклику ротації IP: ${err.message}` };
+        }
+
+        await new Promise(r => setTimeout(r, 1500));
+
+        if (!proxyStr) return { ok: true, message: 'Запит ротації надіслано.' };
+        const liveInfo = await this.checkProxy(proxyStr);
+        if (!liveInfo.ok) {
+            return { ok: false, error: `Ротацію виконано, але проксі недоступний: ${liveInfo.error}` };
+        }
+        return {
+            ok: true,
+            newIp: liveInfo.ip,
+            message: `IP успішно змінено на ${liveInfo.ip}`
+        };
+    }
+
     // Perform REAL Network Ping via Proxy to ip-api.com
     static async fetchLiveProxyInfo(proxyParsed) {
         if (!proxyParsed) return { ok: false, error: 'Без проксі' };

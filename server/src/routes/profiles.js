@@ -18,6 +18,7 @@ function toProfileResponse(row) {
         name: row.name,
         url: row.url,
         proxy: row.proxy,
+        proxyRotateUrl: row.proxy_rotate_url || '',
         userAgent: row.user_agent,
         timezone: row.timezone,
         cookies: row.cookies,
@@ -59,9 +60,17 @@ router.get('/', async (req, res, next) => {
         }
         const requestedIds = typeof req.query.ids === 'string' ? req.query.ids.split(',').filter(Boolean) : [];
         const allowed = Array.isArray(req.user.allowed_profiles) ? req.user.allowed_profiles : [];
-        const permittedIds = allowed.includes('*') ? requestedIds : requestedIds.filter(id => allowed.includes(id));
-        if (permittedIds.length === 0) return res.json({ profiles: [] });
-        const { rows } = await pool.query('SELECT * FROM profiles WHERE id = ANY($1)', [permittedIds]);
+        if (allowed.includes('*')) {
+            if (requestedIds.length > 0) {
+                const { rows } = await pool.query('SELECT * FROM profiles WHERE id = ANY($1)', [requestedIds]);
+                return res.json({ profiles: rows.map(toProfileResponse) });
+            }
+            const { rows } = await pool.query('SELECT * FROM profiles');
+            return res.json({ profiles: rows.map(toProfileResponse) });
+        }
+        const targetIds = requestedIds.length > 0 ? requestedIds.filter(id => allowed.includes(id)) : allowed;
+        if (targetIds.length === 0) return res.json({ profiles: [] });
+        const { rows } = await pool.query('SELECT * FROM profiles WHERE id = ANY($1)', [targetIds]);
         res.json({ profiles: rows.map(toProfileResponse) });
     } catch (err) { next(err); }
 });
@@ -93,18 +102,18 @@ router.put('/:id', requireAdmin, async (req, res, next) => {
             const updatedAt = Date.now();
             const updatedBy = req.user.username;
             const params = [
-                id, data.name, data.url, data.proxy || '', data.userAgent || '', data.timezone || '',
+                id, data.name, data.url, data.proxy || '', data.proxyRotateUrl || '', data.userAgent || '', data.timezone || '',
                 JSON.stringify(data.cookies), JSON.stringify(data.fingerprint || null),
                 JSON.stringify(data.fingerprintHeaders || {}), revision, updatedBy, updatedAt
             ];
             const { rows: written } = await client.query(
-                `INSERT INTO profiles (id, name, url, proxy, user_agent, timezone, cookies, fingerprint, fingerprint_headers, revision, updated_by, updated_at)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                `INSERT INTO profiles (id, name, url, proxy, proxy_rotate_url, user_agent, timezone, cookies, fingerprint, fingerprint_headers, revision, updated_by, updated_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                  ON CONFLICT (id) DO UPDATE SET
-                   name=EXCLUDED.name, url=EXCLUDED.url, proxy=EXCLUDED.proxy, user_agent=EXCLUDED.user_agent,
-                   timezone=EXCLUDED.timezone, cookies=EXCLUDED.cookies, fingerprint=EXCLUDED.fingerprint,
-                   fingerprint_headers=EXCLUDED.fingerprint_headers, revision=EXCLUDED.revision,
-                   updated_by=EXCLUDED.updated_by, updated_at=EXCLUDED.updated_at
+                   name=EXCLUDED.name, url=EXCLUDED.url, proxy=EXCLUDED.proxy, proxy_rotate_url=EXCLUDED.proxy_rotate_url,
+                   user_agent=EXCLUDED.user_agent, timezone=EXCLUDED.timezone, cookies=EXCLUDED.cookies,
+                   fingerprint=EXCLUDED.fingerprint, fingerprint_headers=EXCLUDED.fingerprint_headers,
+                   revision=EXCLUDED.revision, updated_by=EXCLUDED.updated_by, updated_at=EXCLUDED.updated_at
                  RETURNING *`,
                 params
             );
@@ -129,6 +138,13 @@ router.delete('/:id', requireAdmin, async (req, res, next) => {
 
 // Cookie-only sync while a browser session is live. Requires the caller to hold a
 // live lease for this exact deviceId AND a matching expectedRevision — the same two
+function getActiveHolders(activeHolderRaw) {
+    if (!activeHolderRaw) return [];
+    const holders = Array.isArray(activeHolderRaw) ? activeHolderRaw : [activeHolderRaw];
+    const now = Date.now();
+    return holders.filter(h => h && typeof h === 'object' && h.deviceId && Number(h.expiresAt || 0) > now);
+}
+
 // invariants functions/index.js's syncProfileSession enforced.
 router.post('/:id/session-sync', requireAccess, async (req, res, next) => {
     try {
@@ -141,13 +157,11 @@ router.post('/:id/session-sync', requireAccess, async (req, res, next) => {
             const { rows } = await client.query('SELECT * FROM profiles WHERE id=$1 FOR UPDATE', [id]);
             if (!rows.length) throw new HttpError(404, 'Профіль не знайдено.');
             const current = rows[0];
-            const holder = current.active_holder;
             const now = Date.now();
-            if (!holder || holder.deviceId !== deviceId || Number(holder.expiresAt || 0) <= now) {
+            const holders = getActiveHolders(current.active_holder);
+            const activeDeviceHolder = holders.find(h => h.deviceId === deviceId);
+            if (!activeDeviceHolder) {
                 throw new HttpError(409, 'Потрібен чинний lease профілю для синхронізації сесії.');
-            }
-            if (expectedRevision !== current.revision) {
-                throw new HttpError(409, 'Конфлікт синхронізації: профіль змінився на іншому пристрої.');
             }
             const revision = current.revision + 1;
             const updatedAt = now;
@@ -216,13 +230,17 @@ router.post('/:id/lease/claim', requireAccess, async (req, res, next) => {
             if (!rows.length) throw new HttpError(404, 'Профіль не знайдено.');
             const current = rows[0];
             const now = Date.now();
-            const existingHolder = current.active_holder;
-            if (existingHolder && existingHolder.deviceId !== deviceId && Number(existingHolder.expiresAt || 0) > now) {
-                throw new HttpError(409, `Профіль зайнято користувачем ${existingHolder.username || 'іншого пристрою'}.`);
+            let holders = getActiveHolders(current.active_holder);
+            let myHolder = holders.find(h => h.deviceId === deviceId);
+            if (myHolder) {
+                myHolder.expiresAt = now + LEASE_TTL_MS;
+                myHolder.username = req.user.username;
+            } else {
+                myHolder = { username: req.user.username, deviceId, launchedAt: now, expiresAt: now + LEASE_TTL_MS };
+                holders.push(myHolder);
             }
-            const holder = { username: req.user.username, deviceId, launchedAt: now, expiresAt: now + LEASE_TTL_MS };
-            const { rows: written } = await client.query('UPDATE profiles SET active_holder=$1 WHERE id=$2 RETURNING *', [JSON.stringify(holder), id]);
-            return { row: written[0], activeHolder: holder };
+            const { rows: written } = await client.query('UPDATE profiles SET active_holder=$1 WHERE id=$2 RETURNING *', [JSON.stringify(holders), id]);
+            return { row: written[0], activeHolder: myHolder };
         });
 
         emitChange('modified', row);
@@ -238,14 +256,17 @@ router.post('/:id/lease/heartbeat', requireAccess, async (req, res, next) => {
         const activeHolder = await withTransaction(async (client) => {
             const { rows } = await client.query('SELECT * FROM profiles WHERE id=$1 FOR UPDATE', [id]);
             if (!rows.length) throw new HttpError(404, 'Профіль не знайдено.');
-            const current = rows[0].active_holder;
-            if (!current || current.deviceId !== deviceId) {
+            const current = rows[0];
+            const now = Date.now();
+            let holders = getActiveHolders(current.active_holder);
+            let myHolder = holders.find(h => h.deviceId === deviceId);
+            if (!myHolder) {
                 throw new HttpError(409, 'Lease профілю більше не належить цьому пристрою.');
             }
-            const now = Date.now();
-            const holder = { username: req.user.username, deviceId, launchedAt: current.launchedAt || now, expiresAt: now + LEASE_TTL_MS };
-            await client.query('UPDATE profiles SET active_holder=$1 WHERE id=$2', [JSON.stringify(holder), id]);
-            return holder;
+            myHolder.expiresAt = now + LEASE_TTL_MS;
+            myHolder.username = req.user.username;
+            await client.query('UPDATE profiles SET active_holder=$1 WHERE id=$2', [JSON.stringify(holders), id]);
+            return myHolder;
         });
 
         res.json({ activeHolder });
@@ -260,12 +281,11 @@ router.post('/:id/lease/release', requireAccess, async (req, res, next) => {
         const row = await withTransaction(async (client) => {
             const { rows } = await client.query('SELECT * FROM profiles WHERE id=$1 FOR UPDATE', [id]);
             if (!rows.length) return null;
-            const current = rows[0].active_holder;
-            if (current && current.deviceId === deviceId) {
-                const { rows: written } = await client.query('UPDATE profiles SET active_holder=NULL WHERE id=$1 RETURNING *', [id]);
-                return written[0];
-            }
-            return null;
+            let holders = getActiveHolders(rows[0].active_holder);
+            holders = holders.filter(h => h.deviceId !== deviceId);
+            const newPayload = holders.length > 0 ? JSON.stringify(holders) : null;
+            const { rows: written } = await client.query('UPDATE profiles SET active_holder=$1 WHERE id=$2 RETURNING *', [newPayload, id]);
+            return written[0];
         });
 
         if (row) emitChange('modified', row);

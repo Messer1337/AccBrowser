@@ -137,6 +137,10 @@ class BrowserLauncher {
 
         let proxyUser = '', proxyPass = '';
         if (profile.proxy && profile.proxy.trim() !== '') {
+            const proxyCheck = await PreflightChecker.checkProxy(profile.proxy);
+            if (!proxyCheck.ok) {
+                throw new Error(`Проксі недоступний: ${proxyCheck.error || 'не вдалося встановити з’єднання'}. Запуск профілю скасовано задля безпеки.`);
+            }
             const parsedProxy = PreflightChecker.parseProxy(profile.proxy);
             if (!parsedProxy) throw new Error('Некоректний формат проксі.');
             const host = parsedProxy.host.includes(':') ? `[${parsedProxy.host}]` : parsedProxy.host;
@@ -148,6 +152,10 @@ class BrowserLauncher {
             args.push('--force-webrtc-ip-handling-policy=disable_non_proxied_udp');
             // Force loopback through the proxy too, closing the default bypass exemption
             args.push('--proxy-bypass-list=<-loopback>');
+
+            if (!profile.timezone && proxyCheck.realTimezone) {
+                profile.timezone = proxyCheck.realTimezone;
+            }
         }
 
         // The fingerprint's UA is canonical. A profile-level free-form UA that differs from

@@ -151,24 +151,11 @@ class AuthManager {
     }
 
     needsInitialSetup() {
-        return this.initialSetupRequired && this.getUsers().length === 0;
+        return false;
     }
 
-    setupInitialAdmin(password) {
-        if (!this.needsInitialSetup()) {
-            throw new Error('Першого адміністратора вже створено.');
-        }
-        this.validateNewPassword(password);
-        fs.writeJsonSync(this.usersFile, [{
-            username: 'admin',
-            passwordHash: this.hashPassword(password),
-            role: 'admin',
-            mustChangePassword: false,
-            allowedProfiles: ['*'],
-            createdAt: Date.now()
-        }], { spaces: 2 });
-        this.initialSetupRequired = false;
-        return { success: true };
+    setupInitialAdmin() {
+        throw new Error('Адміністратор керується та ініціалізується виключно на сервері.');
     }
 
     async restoreSession() {
