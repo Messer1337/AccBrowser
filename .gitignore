@@ -1,33 +1,67 @@
-# Dependencies
-node_modules/
+# ==========================================
+# OASIS Browser - Production .gitignore
+# ==========================================
 
-# Build and dist outputs
+# 1. Dependencies & Package Managers
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# 2. Build & Distribution Outputs
 dist/
 build/
+out/
 hosting_updates/
 .firebase/
 RELEASE_NOTES_CURRENT.md
 
-# Reverse engineering references and binary apps
-reference/
+# 3. Environment & Configuration Secrets
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
 
-# Local database & profiles storage (contains user session cookies & tokens)
+# 4. Local User Data & Profile Storage (Contains Encrypted Credentials/Cookies)
 local_db/
 profiles/
+users_temp.json
 
-# Self-hosted server: local Postgres backup dumps (contain every team account,
-# profile, cookie, and audit log — never commit these)
+# 5. Database Backups & Dumps
 /backups/
+/server/backups/
+*.sql
+*.sql.gz
+*.dump
+
+# 6. Temporary & Internal Data
 *.json
 !package.json
 !package-lock.json
 !firebase.json
+!.firebaserc
 
-# Environment and logs
-.env
+# 7. Reverse Engineering References & Internal Benchmarks
+reference/
+OASIS_Browser_PSYOPS_Presentation.pptx
+
+# 8. Logs & Crash Reports
 *.log
+logs/
+*.syslog
 
-# OS & IDE files
+# 9. OS & IDE Metadata
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 .idea/
 .vscode/
+*.swp
+*.swo
