@@ -142,9 +142,16 @@
           <h1 class="page-title">Мульти-Акаунт Профілі</h1>
           <p class="page-subtitle" id="worker-access-subtitle">Доступні ізольовані середовища для вашого акаунта</p>
         </div>
-        <button class="btn btn-primary admin-only" id="btn-add-profile">
-          <span>+</span> Новий профіль
-        </button>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <select id="folder-filter" class="form-select" style="padding: 8px 12px; background: var(--bg-card); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">
+            <option value="">📁 Усі Папки</option>
+          </select>
+          <input type="text" id="search-input" placeholder="🔍 Пошук за назвою або #тегом..." style="padding: 8px 12px; background: var(--bg-card); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; width: 220px;" />
+          <button class="btn btn-secondary" id="btn-check-all-proxies" title="Діагностика доступності та пінгу всіх проксі">⚡ Перевірити проксі</button>
+          <button class="btn btn-primary admin-only" id="btn-add-profile">
+            <span>+</span> Новий профіль
+          </button>
+        </div>
       </header>
 
       <!-- Profiles Grid -->
@@ -166,6 +173,14 @@
         <div class="form-group">
           <label for="profile-name">Назва акаунта / сервісу</label>
           <input type="text" id="profile-name" placeholder="наприклад: ChatGPT Pro" required />
+        </div>
+        <div class="form-group">
+          <label for="profile-folder">Папка / Проект (опціонально)</label>
+          <input type="text" id="profile-folder" placeholder="наприклад: Crypto Airdrops або Facebook Ads" />
+        </div>
+        <div class="form-group">
+          <label for="profile-tags">Теги (через кому, опціонально)</label>
+          <input type="text" id="profile-tags" placeholder="наприклад: FB, US, Main, TeamA" />
         </div>
         <div class="form-group">
           <label for="profile-url">Стартова URL-адреса</label>

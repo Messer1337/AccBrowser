@@ -112,6 +112,12 @@ function validateProfileData(data) {
     if (data.proxyRotateUrl !== undefined && data.proxyRotateUrl !== null && (typeof data.proxyRotateUrl !== 'string' || data.proxyRotateUrl.length > 4096)) {
         throw new HttpError(400, 'Некоректний URL ротації проксі.');
     }
+    if (data.folder !== undefined && data.folder !== null && (typeof data.folder !== 'string' || data.folder.length > 120)) {
+        throw new HttpError(400, 'Некоректна папка профілю.');
+    }
+    if (data.tags !== undefined && data.tags !== null && (!Array.isArray(data.tags) || data.tags.some(t => typeof t !== 'string' || t.length > 60))) {
+        throw new HttpError(400, 'Некоректні теги профілю.');
+    }
     if (data.userAgent !== undefined && data.userAgent !== null && (typeof data.userAgent !== 'string' || data.userAgent.length > 2048)) {
         throw new HttpError(400, 'Некоректний userAgent.');
     }

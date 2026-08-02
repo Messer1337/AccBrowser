@@ -184,6 +184,36 @@ app.whenReady().then(async () => {
         return PreflightChecker.rotateProxyIp(profile.proxyRotateUrl, profile.proxy);
     });
 
+    ipcMain.handle('check-all-proxies', async () => {
+        const user = authManager.getCurrentUser();
+        if (!user) return { ok: false, error: 'Користувач не авторизований.' };
+        const profiles = await syncManager.listProfiles(user);
+        const results = {};
+        let onlineCount = 0;
+        let offlineCount = 0;
+
+        await Promise.all(profiles.map(async (p) => {
+            if (!p.proxy || p.proxy.trim() === '') {
+                results[p.id] = { ok: true, status: 'direct', pingMs: 0, message: 'Пряме підключення' };
+                onlineCount++;
+                return;
+            }
+            const res = await PreflightChecker.checkProxy(p.proxy);
+            results[p.id] = res;
+            if (res.ok) onlineCount++;
+            else offlineCount++;
+        }));
+
+        return {
+            ok: true,
+            results,
+            onlineCount,
+            offlineCount,
+            totalCount: profiles.length,
+            message: `Перевірено ${profiles.length} проксі: ${onlineCount} онлайн (🟢), ${offlineCount} офлайн (🔴)`
+        };
+    });
+
     // IPC Handlers: Auth
     ipcMain.handle('get-initial-setup-status', async () => ({
         needsSetup: authManager.needsInitialSetup()

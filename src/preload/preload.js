@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('api', {
     runPreflightTest: (id) => ipcRenderer.invoke('run-preflight-test', id),
     runFullHealthCheck: (id) => ipcRenderer.invoke('run-full-health-check', id),
     rotateProxyIp: (id) => ipcRenderer.invoke('rotate-proxy-ip', id),
+    checkAllProxies: () => ipcRenderer.invoke('check-all-proxies'),
     getAuditLogs: () => ipcRenderer.invoke('get-audit-logs'),
     getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
     updateFirebaseConfig: (config) => ipcRenderer.invoke('update-firebase-config', config),

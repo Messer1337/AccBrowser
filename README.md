@@ -1,6 +1,6 @@
 # 🏝️ OASIS Browser Enterprise Platform
 
-> **Production-Grade Multi-Account Anti-Detect Browser Platform featuring Server-Authoritative Architecture, Real-Time WebSocket Synchronization & Single-Admin Security Model.**
+> **Production-Grade Multi-Account Anti-Detect Browser Platform featuring Server-Authoritative Architecture, Real-Time WebSocket Synchronization, Single-Admin Security Model, Workspaces/Folders Organization & Live Proxy Health Dashboard.**
 
 ![OASIS Browser Banner](assets/icon.png)
 
@@ -15,7 +15,7 @@
 
 ## 📐 Архітектура системи (System Architecture)
 
-OASIS Browser побудовано за **серверно-авторитарною архітектурою**. Всі критичні дані (користувачі, ролі, профілі, сесійні кукі, лізинг та журнал аудіту) зберігаються у захищеній хмарній базі даних **PostgreSQL** на вашому самостійно розгорнутому сервері.
+OASIS Browser побудовано за **серверно-авторитарною архітектурою**. Всі критичні дані (користувачі, ролі, профілі, сесійні кукі, папки/теги, лізинг та журнал аудіту) зберігаються у захищеній хмарній базі даних **PostgreSQL** на вашому самостійно розгорнутому сервері.
 
 Клієнтський додаток (Electron) працює як безпечне середовище виконання ("executor"), що взаємодіє з сервером через REST API та WebSockets.
 
@@ -24,6 +24,7 @@ OASIS Browser побудовано за **серверно-авторитарн�
 │              OASIS Browser Client (Electron)            │
 │  - Chromium Execution Engine (Puppeteer Extra)          │
 │  - Live Cookie Injector & WebRTC Leak Shield            │
+│  - Workspaces/Folders & Live Proxy Health Dashboard     │
 └────────────┬─────────────────────────────▲──────────────┘
              │ HTTP / REST                 │ WebSockets
              ▼                             │ (Socket.IO)
@@ -49,32 +50,29 @@ OASIS Browser побудовано за **серверно-авторитарн�
 - **Захист від підробки ролей**: Будь-які спроби створити другого адміна (`role: 'admin'`), змінити роль існуючого адміна чи видалити його блокуються сервером (`400 Bad Request`).
 - **Співробітники (`role: 'user'`)**: Створюються Адміністратором і бачать тільки призначені їм профілі (`allowedProfiles`).
 
-### ⚡ 2. Паралельна робота з 1 профілю & Live Cookie Sync
+### 📁 2. Папки, Теги та Проекти (Workspaces & Folders)
+- **Групування профілів**: Сортування акаунтів за проектами чи командами (наприклад: `Crypto Airdrops`, `Facebook Ads Team 1`, `Google Merchant`).
+- **Теги**: Гнучке маркування акаунтів (наприклад: `#FB`, `#US`, `#Main`, `#TeamA`).
+- **Швидка фільтрація**: Вибір папки у випадаючому списку та швидкий пошук в реальному часі за назвою або тегами.
+
+### ⚡ 3. Моніторинг стану та пінгу проксі (Live Proxy Health Dashboard)
+- **Вимірювання пінгу (Latency in ms)**: Автоматичне вимірювання затримки підключення через кожен проксі.
+- **Індикація на картках**: Плашка статусу прямо на картці профілю (`🟢 95ms (US)` або `🔴 Офлайн`).
+- **Кнопка "⚡ Перевірити проксі"**: Одночасна паралельна діагностика всіх профілів у 1 клік з виводом підсумкового звіту.
+
+### ⚡ 4. Паралельна робота з 1 профілю & Live Cookie Sync
 - **Одночасний запуск з різних ПК**: Декілька співробітників можуть **одночасно працювати з одного й того ж профілю**.
-- **Єдиний проксі та відбиток**: Усі пристрої підключаються через **один і той же проксі-сервер** з однаковими цифровими відбитками (User-Agent, мова, часовий пояс). Джерело трафіку для сайтів виглядає як 1 зовнішній IP.
+- **Єдиний проксі та відбиток**: Усі пристрої підключаються через **один і той же проксі-сервер** з однаковими цифровими відбитками (User-Agent, мова, часовий пояс).
 - **Впорскування кукі у реальному часі**: Нові кукі синхронізуються через WebSockets та **впорскуються (live-inject) у відкриті вкладки Chrome** на інших пристроях без перезапуску браузера.
 
-### 📲 3. Ротація мобільних проксі в 1 клік (Mobile Proxy IP Rotation)
+### 📲 5. Ротація мобільних проксі в 1 клік (Mobile Proxy IP Rotation)
 - **Change IP Link**: Можливість задати для профілю посилання для примусової ротації IP (`proxyRotateUrl`).
 - **Кнопка "🔄 Ротація IP"**: Натискання надсилає HTTP-запит до мобільного проксі-провайдера, перевіряє новий IP через `PreflightChecker` і виводить актуальну геолокацію та IP на картці.
 
-### 🛡️ 4. Обов'язкова перевірка проксі & WebRTC Shielding
+### 🛡️ 6. Обов'язкова перевірка проксі & WebRTC Shielding
 - **Preflight Live Proxy Ping**: Перед запуском Chrome виконується обов'язкова перевірка доступності проксі. Якщо проксі недоступний — **Chrome НЕ відкривається**, унеможливлюючи витік вашої реальної IP-адреси.
 - **Захист від WebRTC-витоків**: Прапори `--force-webrtc-ip-handling-policy=disable_non_proxied_udp` унеможливлюють витік локального/зовнішнього IP.
 - **Auto-Timezone Alignment**: Автоматичне узгодження часового поясу браузера з реальним IP проксі.
-
-### 🎨 5. Преміальний UI з підтримкою тем (Multi-Theme UI)
-- **4 неонові теми**: Oasis Cyber (Neon Indigo), Emerald (Tropical Cyan), Sunset (Rose Gold), Midnight (OLED Dark).
-- **Glassmorphism Design**: Backdrop blur, гладкі анімації, індикатори стану профілю та Trust Score.
-
----
-
-## 🛡️ Модель безпеки та Red-Teaming (Security & Hardening)
-
-* **Scrypt Password Hashing**: Збереження паролів із 16-байтовою випадковою сілью та timing-safe перевіркою.
-* **Dynamic Request Authentication**: JWT токени діють 24 години, а права користувача та роль перевіряються в БД при кожному окремому HTTP/WebSocket запиті.
-* **Rate Limiting**: Маршрут входу захищено суворим обмеженням (макс. 15 спроб на 15 хвилин).
-* **Payload Caps**: Cookies обмежено 700 KB, відбиток — 50 KB, тіло запиту — 5 MB.
 
 ---
 
@@ -123,7 +121,6 @@ npm install
 
 ## 📦 Збірка Інсталяторів (Build & Packaging)
 
-Збірка готових інсталяторів для macOS (`.zip`) та Windows (`.exe`):
 ```bash
 npm run build
 ```

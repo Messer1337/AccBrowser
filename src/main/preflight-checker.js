@@ -69,6 +69,8 @@ class PreflightChecker {
             port: parsed.port,
             user: parsed.user || null,
             ip: liveInfo.ip,
+            pingMs: liveInfo.pingMs || 0,
+            country: liveInfo.country || '',
             message: `Проксі доступний (${parsed.host}:${parsed.port})`
         };
     }
@@ -126,12 +128,14 @@ class PreflightChecker {
             return { ok: false, error: 'Не вдалося ініціалізувати проксі-агент: ' + e.message };
         }
 
+        const start = Date.now();
         return new Promise((resolve) => {
             try {
                 const req = http.get('http://ip-api.com/json/', { agent, timeout: 6000 }, (res) => {
                     let raw = '';
                     res.on('data', chunk => raw += chunk);
                     res.on('end', () => {
+                        const pingMs = Date.now() - start;
                         try {
                             const data = JSON.parse(raw);
                             if (data && data.status === 'success') {
@@ -139,7 +143,8 @@ class PreflightChecker {
                                     ok: true,
                                     ip: data.query,
                                     country: `${data.country} (${data.city})`,
-                                    timezone: data.timezone
+                                    timezone: data.timezone,
+                                    pingMs
                                 });
                             } else {
                                 resolve({ ok: false, error: 'ip-api повернув статус помилки' });

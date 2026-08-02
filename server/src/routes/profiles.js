@@ -19,6 +19,8 @@ function toProfileResponse(row) {
         url: row.url,
         proxy: row.proxy,
         proxyRotateUrl: row.proxy_rotate_url || '',
+        folder: row.folder || '',
+        tags: Array.isArray(row.tags) ? row.tags : [],
         userAgent: row.user_agent,
         timezone: row.timezone,
         cookies: row.cookies,
@@ -102,15 +104,18 @@ router.put('/:id', requireAdmin, async (req, res, next) => {
             const updatedAt = Date.now();
             const updatedBy = req.user.username;
             const params = [
-                id, data.name, data.url, data.proxy || '', data.proxyRotateUrl || '', data.userAgent || '', data.timezone || '',
+                id, data.name, data.url, data.proxy || '', data.proxyRotateUrl || '',
+                data.folder || '', JSON.stringify(Array.isArray(data.tags) ? data.tags : []),
+                data.userAgent || '', data.timezone || '',
                 JSON.stringify(data.cookies), JSON.stringify(data.fingerprint || null),
                 JSON.stringify(data.fingerprintHeaders || {}), revision, updatedBy, updatedAt
             ];
             const { rows: written } = await client.query(
-                `INSERT INTO profiles (id, name, url, proxy, proxy_rotate_url, user_agent, timezone, cookies, fingerprint, fingerprint_headers, revision, updated_by, updated_at)
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+                `INSERT INTO profiles (id, name, url, proxy, proxy_rotate_url, folder, tags, user_agent, timezone, cookies, fingerprint, fingerprint_headers, revision, updated_by, updated_at)
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
                  ON CONFLICT (id) DO UPDATE SET
                    name=EXCLUDED.name, url=EXCLUDED.url, proxy=EXCLUDED.proxy, proxy_rotate_url=EXCLUDED.proxy_rotate_url,
+                   folder=EXCLUDED.folder, tags=EXCLUDED.tags,
                    user_agent=EXCLUDED.user_agent, timezone=EXCLUDED.timezone, cookies=EXCLUDED.cookies,
                    fingerprint=EXCLUDED.fingerprint, fingerprint_headers=EXCLUDED.fingerprint_headers,
                    revision=EXCLUDED.revision, updated_by=EXCLUDED.updated_by, updated_at=EXCLUDED.updated_at

@@ -45,8 +45,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   const profileUrlInput = document.getElementById('profile-url');
   const profileProxyInput = document.getElementById('profile-proxy');
   const profileProxyRotateUrlInput = document.getElementById('profile-proxy-rotate-url');
+  const profileFolderInput = document.getElementById('profile-folder');
+  const profileTagsInput = document.getElementById('profile-tags');
   const profileUaInput = document.getElementById('profile-ua');
   const profileTimezoneInput = document.getElementById('profile-timezone');
+
+  const folderFilter = document.getElementById('folder-filter');
+  const searchInput = document.getElementById('search-input');
+  const btnCheckAllProxies = document.getElementById('btn-check-all-proxies');
+
+  let allProfilesList = [];
+  const proxyHealthCache = {};
 
   const modalBackup = document.getElementById('modal-backup');
   const navBackup = document.getElementById('nav-backup');
@@ -220,76 +229,142 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function loadProfiles() {
     try {
       const result = await window.api.listProfiles();
-      const profiles = result.profiles || [];
-      profilesContainer.innerHTML = '';
+      allProfilesList = result.profiles || [];
 
       const isAdmin = currentUser && currentUser.role === 'admin';
-
       if (!isAdmin) {
         workerAccessSubtitle.textContent = `Вам надано доступ до ${result.allowedCount} з ${result.totalCount} профілів команди`;
       } else {
         workerAccessSubtitle.textContent = `Доступні ізольовані середовища для вашого акаунта (${result.allowedCount} активних)`;
       }
 
-      if (profiles.length === 0) {
-        profilesContainer.innerHTML = `
-          <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
-            Немає доступних профілів для вашого акаунта.
-          </div>
-        `;
-        return;
+      // Populate Folder Filter Options
+      if (folderFilter) {
+        const selectedFolder = folderFilter.value;
+        const folders = Array.from(new Set(allProfilesList.map(p => p.folder).filter(Boolean))).sort();
+        folderFilter.innerHTML = '<option value="">📁 Усі Папки</option>';
+        folders.forEach(f => {
+          const opt = document.createElement('option');
+          opt.value = f;
+          opt.textContent = `📁 ${f}`;
+          if (f === selectedFolder) opt.selected = true;
+          folderFilter.appendChild(opt);
+        });
       }
 
-      profiles.forEach(p => {
-        const card = document.createElement('div');
-        card.className = 'profile-card';
+      renderProfilesList();
+    } catch (err) {
+      console.error('Error loading profiles:', err);
+    }
+  }
 
-        const proxyText = p.proxy && p.proxy.trim() !== '' ? p.proxy : 'Без проксі (Direct)';
+  function renderProfilesList() {
+    profilesContainer.innerHTML = '';
+    const isAdmin = currentUser && currentUser.role === 'admin';
 
-        let activeStatusBadge = '⚪ Закритий';
-        if (p.isRunning) {
-          activeStatusBadge = '🟢 Відкрито локально';
-        } else if (p.activeHolder && p.activeHolder.username) {
-          activeStatusBadge = `🟡 Зайнято (${escapeHtml(p.activeHolder.username)})`;
+    const selectedFolder = folderFilter ? folderFilter.value : '';
+    const query = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+    const filtered = allProfilesList.filter(p => {
+      if (selectedFolder && p.folder !== selectedFolder) return false;
+      if (query) {
+        const nameMatch = p.name && p.name.toLowerCase().includes(query);
+        const folderMatch = p.folder && p.folder.toLowerCase().includes(query);
+        const tagMatch = Array.isArray(p.tags) && p.tags.some(t => t.toLowerCase().includes(query));
+        if (!nameMatch && !folderMatch && !tagMatch) return false;
+      }
+      return true;
+    });
+
+    if (filtered.length === 0) {
+      profilesContainer.innerHTML = `
+        <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--text-muted);">
+          Немає доступних профілів за вказаними фільтрами.
+        </div>
+      `;
+      return;
+    }
+
+    filtered.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'profile-card';
+
+      const proxyText = p.proxy && p.proxy.trim() !== '' ? p.proxy : 'Без проксі (Direct)';
+
+      let activeStatusBadge = '⚪ Закритий';
+      if (p.isRunning) {
+        activeStatusBadge = '🟢 Відкрито локально';
+      } else if (p.activeHolder && p.activeHolder.username) {
+        activeStatusBadge = `🟡 Зайнято (${escapeHtml(p.activeHolder.username)})`;
+      }
+
+      // Proxy Health Cache Badge
+      let proxyHealthHTML = '';
+      const health = proxyHealthCache[p.id];
+      if (health) {
+        if (health.ok) {
+          const pingStr = health.pingMs ? `${health.pingMs}ms` : 'ОК';
+          proxyHealthHTML = `<div style="font-size:11px; margin-top:4px; color:#10b981;">🟢 <b>${pingStr}</b> ${health.country ? `(${escapeHtml(health.country)})` : ''}</div>`;
+        } else {
+          proxyHealthHTML = `<div style="font-size:11px; margin-top:4px; color:#ef4444;">🔴 <b>Офлайн</b> (${escapeHtml(health.error || 'Недоступний')})</div>`;
         }
+      }
 
-        const adminButtonsHTML = isAdmin ? `
-          <button class="btn btn-secondary btn-icon btn-edit" data-id="${p.id}" title="Редагувати">✏️</button>
-        ` : '';
+      const folderBadgeHTML = p.folder && p.folder.trim() !== '' ? `
+        <span style="font-size:11px; padding:2px 8px; background:rgba(99,102,241,0.2); color:#818cf8; border:1px solid rgba(99,102,241,0.3); border-radius:12px; margin-bottom:6px; display:inline-block;">📁 ${escapeHtml(p.folder)}</span>
+      ` : '';
 
-        const deleteButtonHTML = isAdmin ? `
-          <button class="btn btn-secondary btn-icon btn-delete" data-id="${p.id}" title="Видалити">🗑</button>
-        ` : '';
+      const tagsHTML = Array.isArray(p.tags) && p.tags.length > 0 ? `
+        <div style="margin-top:6px; display:flex; gap:4px; flex-wrap:wrap;">
+          ${p.tags.map(t => `<span style="font-size:10px; padding:2px 6px; background:rgba(255,255,255,0.08); color:var(--text-muted); border-radius:4px;">#${escapeHtml(t)}</span>`).join('')}
+        </div>
+      ` : '';
 
-        const rotateButtonHTML = p.proxyRotateUrl && p.proxyRotateUrl.trim() !== '' ? `
-          <button class="btn btn-secondary btn-icon btn-rotate" data-id="${p.id}" title="Оновити IP (Ротація мобільного проксі)">🔄</button>
-        ` : '';
+      const adminButtonsHTML = isAdmin ? `
+        <button class="btn btn-secondary btn-icon btn-edit" data-id="${p.id}" title="Редагувати">✏️</button>
+      ` : '';
 
-        card.innerHTML = `
-          <div>
-            <div class="card-header">
-              <span class="service-badge">${activeStatusBadge}</span>
-              ${adminButtonsHTML}
-            </div>
-            <div class="profile-title">${escapeHtml(p.name)}</div>
-            <div class="profile-url">${escapeHtml(p.url)}</div>
-            <div class="proxy-info">
-              <span>🌐</span> ${escapeHtml(proxyText)}
-            </div>
+      const deleteButtonHTML = isAdmin ? `
+        <button class="btn btn-secondary btn-icon btn-delete" data-id="${p.id}" title="Видалити">🗑</button>
+      ` : '';
+
+      const rotateButtonHTML = p.proxyRotateUrl && p.proxyRotateUrl.trim() !== '' ? `
+        <button class="btn btn-secondary btn-icon btn-rotate" data-id="${p.id}" title="Оновити IP (Ротація мобільного проксі)">🔄</button>
+      ` : '';
+
+      card.innerHTML = `
+        <div>
+          <div class="card-header">
+            <span class="service-badge">${activeStatusBadge}</span>
+            ${adminButtonsHTML}
           </div>
-          <div class="card-actions">
-            <button class="btn btn-secondary btn-icon btn-test" data-id="${p.id}" title="Автотест підключення">🔍</button>
-            ${rotateButtonHTML}
-            <button class="btn btn-secondary btn-icon btn-warmup" data-id="${p.id}" title="Авто-прогрів акаунта (набір куків & trust score)">🔥</button>
-            <button class="btn btn-primary btn-launch" data-id="${p.id}">
-              ${p.isRunning ? 'Відкрито' : '▶ Запустити'}
-            </button>
-            ${deleteButtonHTML}
+          ${folderBadgeHTML}
+          <div class="profile-title">${escapeHtml(p.name)}</div>
+          <div class="profile-url">${escapeHtml(p.url)}</div>
+          <div class="proxy-info">
+            <span>🌐</span> ${escapeHtml(proxyText)}
+            ${proxyHealthHTML}
           </div>
-        `;
+          ${tagsHTML}
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-secondary btn-icon btn-test" data-id="${p.id}" title="Автотест підключення">🔍</button>
+          ${rotateButtonHTML}
+          <button class="btn btn-secondary btn-icon btn-warmup" data-id="${p.id}" title="Авто-прогрів акаунта (набір куків & trust score)">🔥</button>
+          <button class="btn btn-primary btn-launch" data-id="${p.id}">
+            ${p.isRunning ? 'Відкрито' : '▶ Запустити'}
+          </button>
+          ${deleteButtonHTML}
+        </div>
+      `;
 
-        profilesContainer.appendChild(card);
-      });
+      profilesContainer.appendChild(card);
+    });
+
+    bindProfileCardEvents();
+  }
+
+  function bindProfileCardEvents() {
 
       // Bind IP Rotation Buttons
       document.querySelectorAll('.btn-rotate').forEach(btn => {
@@ -408,6 +483,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (profile) {
             profileIdInput.value = profile.id;
             profileNameInput.value = profile.name || '';
+            if (profileFolderInput) profileFolderInput.value = profile.folder || '';
+            if (profileTagsInput) profileTagsInput.value = Array.isArray(profile.tags) ? profile.tags.join(', ') : '';
             profileUrlInput.value = profile.url || '';
             profileProxyInput.value = profile.proxy || '';
             if (profileProxyRotateUrlInput) profileProxyRotateUrlInput.value = profile.proxyRotateUrl || '';
@@ -431,14 +508,45 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
     } catch (err) {
-      console.error('Error loading profiles:', err);
+      console.error('Error binding profile card events:', err);
     }
+  }
+
+  // Bind Filter & Search Listeners
+  if (folderFilter) {
+    folderFilter.addEventListener('change', renderProfilesList);
+  }
+  if (searchInput) {
+    searchInput.addEventListener('input', renderProfilesList);
+  }
+  if (btnCheckAllProxies) {
+    btnCheckAllProxies.addEventListener('click', async () => {
+      btnCheckAllProxies.disabled = true;
+      btnCheckAllProxies.textContent = '⏳...';
+      try {
+        const report = await window.api.checkAllProxies();
+        if (report.ok) {
+          Object.assign(proxyHealthCache, report.results);
+          renderProfilesList();
+          alert(`⚡ ${report.message}`);
+        } else {
+          alert(`❌ Помилка перевірки проксі: ${report.error}`);
+        }
+      } catch (err) {
+        alert('❌ [ПОМИЛКА ДІАГНОСТИКИ ПРОКСІ]: ' + err.message);
+      } finally {
+        btnCheckAllProxies.disabled = false;
+        btnCheckAllProxies.textContent = '⚡ Перевірити проксі';
+      }
+    });
   }
 
   // Open Modal Add Profile
   btnAddProfile.addEventListener('click', () => {
     profileIdInput.value = 'profile_' + Date.now();
     profileNameInput.value = '';
+    if (profileFolderInput) profileFolderInput.value = '';
+    if (profileTagsInput) profileTagsInput.value = '';
     profileUrlInput.value = 'https://chatgpt.com';
     profileProxyInput.value = '';
     if (profileProxyRotateUrlInput) profileProxyRotateUrlInput.value = '';
@@ -533,6 +641,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const profile = {
       id,
       name: profileNameInput.value,
+      folder: profileFolderInput ? profileFolderInput.value.trim() : '',
+      tags: profileTagsInput ? profileTagsInput.value.split(',').map(t => t.trim()).filter(Boolean) : [],
       url: profileUrlInput.value,
       proxy: profileProxyInput.value,
       proxyRotateUrl: profileProxyRotateUrlInput ? profileProxyRotateUrlInput.value.trim() : '',
