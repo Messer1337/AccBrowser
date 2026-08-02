@@ -20,7 +20,7 @@
   <div class="login-overlay active" id="login-overlay">
     <div class="login-card">
       <div class="login-logo">
-        <div class="logo-icon">🏝️</div>
+        <div class="logo-icon" style="font-weight: 800; letter-spacing: 2px;">OASIS</div>
         <h2>OASIS Browser Login</h2>
         <p>Авторизуйтесь для доступу до акаунтів</p>
       </div>
@@ -37,7 +37,7 @@
         <button type="submit" class="btn btn-primary btn-block">Увійти в систему</button>
       </form>
       <div class="login-hint" id="login-hint">
-        <small>💡 Введіть ім'я користувача та пароль для входу в систему.</small>
+        <small>Введіть ім'я користувача та пароль для входу в систему.</small>
       </div>
     </div>
   </div>
@@ -46,7 +46,7 @@
   <div class="modal-overlay" id="modal-change-password">
     <div class="modal">
       <div class="modal-header">
-        <h3>⚠️ Обов'язкова зміна дефолтного пароля</h3>
+        <h3>Обов'язкова зміна дефолтного пароля</h3>
       </div>
       <p class="modal-desc">Ви використовуєте дефолтний пароль <code>admin</code>. Задля безпеки вашої системи необхідно створити новий пароль перед продовженням роботи.</p>
       <form id="form-change-password">
@@ -70,8 +70,8 @@
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="logo">
-        <div class="logo-icon">🏝️</div>
-        <div class="logo-text">OASIS</div>
+        <div class="logo-icon" style="font-weight: 800; letter-spacing: 1px;">OASIS</div>
+        <div class="logo-text">Browser</div>
       </div>
 
       <div class="user-badge-card" id="user-info-card">
@@ -80,41 +80,41 @@
           <div class="user-name" id="user-display-name">Admin</div>
           <div class="user-role" id="user-display-role">Адміністратор</div>
         </div>
-        <button class="btn-logout" id="btn-logout" title="Вийти">🚪</button>
+        <button class="btn-logout" id="btn-logout" title="Вийти">Вийти</button>
       </div>
 
       <!-- Theme Selector Card -->
       <div class="theme-selector-card">
-        <label for="theme-select">🎨 Тема оформлення:</label>
+        <label for="theme-select">Тема оформлення:</label>
         <select id="theme-select" class="theme-select">
-          <option value="cyber">🌌 Oasis Cyber (Neon Indigo)</option>
-          <option value="emerald">🌴 Oasis Emerald (Tropical)</option>
-          <option value="sunset">🌅 Oasis Sunset (Gold & Rose)</option>
-          <option value="midnight">🖤 Oasis Midnight (Cyberpunk)</option>
+          <option value="cyber">Oasis Cyber (Neon Indigo)</option>
+          <option value="emerald">Oasis Emerald (Tropical)</option>
+          <option value="sunset">Oasis Sunset (Gold & Rose)</option>
+          <option value="midnight">Oasis Midnight (Cyberpunk)</option>
         </select>
       </div>
 
       <nav class="nav-menu">
         <button class="nav-item active" id="nav-profiles">
-          <span class="nav-icon">📁</span> Профілі
+          Профілі
         </button>
         <button class="nav-item admin-only" id="nav-users">
-          <span class="nav-icon">👥</span> Користувачі
+          Користувачі
         </button>
         <button class="nav-item admin-only" id="nav-guide">
-          <span class="nav-icon">📖</span> Інструкція Адміна
+          Інструкція Адміна
         </button>
         <button class="nav-item admin-only" id="nav-sync">
-          <span class="nav-icon">⚡</span> Синхронізація
+          Синхронізація
         </button>
         <button class="nav-item admin-only" id="nav-backup">
-          <span class="nav-icon">📥</span> Бекап
+          Бекап
         </button>
         <button class="nav-item admin-only" id="nav-logs">
-          <span class="nav-icon">📜</span> Журнал дій
+          Журнал дій
         </button>
         <button class="nav-item" id="nav-changelog">
-          <span class="nav-icon">🆕</span> Що нового
+          Що нового
         </button>
       </nav>
 
@@ -129,7 +129,7 @@
           <span class="version-number" id="app-version-num">v1.5.0</span>
         </div>
         <button class="btn-check-update" id="btn-check-update">
-          <span>🔄 Перевірити оновлення</span>
+          <span>Перевірити оновлення</span>
         </button>
       </div>
     </aside>
@@ -144,10 +144,10 @@
         </div>
         <div style="display:flex; gap:10px; align-items:center;">
           <select id="folder-filter" class="form-select" style="padding: 8px 12px; background: var(--bg-card); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px;">
-            <option value="">📁 Усі Папки</option>
+            <option value="">Усі папки</option>
           </select>
-          <input type="text" id="search-input" placeholder="🔍 Пошук за назвою або #тегом..." style="padding: 8px 12px; background: var(--bg-card); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; width: 220px;" />
-          <button class="btn btn-secondary" id="btn-check-all-proxies" title="Діагностика доступності та пінгу всіх проксі">⚡ Перевірити проксі</button>
+          <input type="text" id="search-input" placeholder="Пошук за назвою або тегом..." style="padding: 8px 12px; background: var(--bg-card); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 8px; font-size: 13px; width: 220px;" />
+          <button class="btn btn-secondary" id="btn-check-all-proxies" title="Діагностика доступності та пінгу всіх проксі">Перевірити проксі</button>
           <button class="btn btn-primary admin-only" id="btn-add-profile">
             <span>+</span> Новий профіль
           </button>
@@ -189,12 +189,12 @@
         <div class="form-group">
           <label for="profile-proxy">Проксі (обов'язково для антидетекту)</label>
           <input type="text" id="profile-proxy" placeholder="ip:port:user:pass або user:pass@ip:port" />
-          <small>⚠️ Проксі має відповідати цільовому регіону акаунта (наприклад, US/DE)</small>
+          <small>Проксі має відповідати цільовому регіону акаунта (наприклад, US/DE)</small>
         </div>
         <div class="form-group">
           <label for="profile-proxy-rotate-url">URL зміни IP (Мобільний проксі, опціонально)</label>
           <input type="url" id="profile-proxy-rotate-url" placeholder="https://change-ip.proxy-provider.com/rotate?token=..." />
-          <small>💡 Посилання від провайдера для примусової зміни IP-адреси в 1 клік</small>
+          <small>Посилання від провайдера для примусової зміни IP-адреси</small>
         </div>
         <div class="form-group">
           <label for="profile-ua">User-Agent (опціонально)</label>
@@ -203,12 +203,12 @@
         <div class="form-group">
           <label for="profile-timezone">Часовий пояс проксі (опціонально)</label>
           <input type="text" id="profile-timezone" placeholder="наприклад: America/New_York" />
-          <small>🌍 Має відповідати геолокації проксі, інакше антифрод-системи побачать невідповідність</small>
+          <small>Має відповідати геолокації проксі для безпеки відбитка</small>
         </div>
         <div class="form-group">
           <label for="profile-cookies-import">Імпорт Куків (JSON масив)</label>
           <textarea id="profile-cookies-import" rows="3" style="width:100%; background:rgba(15,23,42,0.8); border:1px solid var(--border-color); border-radius:6px; color:#fff; font-family:monospace; padding:8px; font-size:11px;" placeholder='[{"name":"sessionid","value":"xyz","domain":".instagram.com"}]'></textarea>
-          <small>🔥 Вставте збережені кукі для обходу Cloudflare / логін перевірок</small>
+          <small>Вставте збережені кукі для обходу авторизації</small>
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" id="modal-cancel">Скасувати</button>
@@ -222,25 +222,25 @@
   <div class="modal-overlay" id="modal-admin-guide">
     <div class="modal modal-lg">
       <div class="modal-header">
-        <h3>📖 Інструкція для Адміністратора: Як не спалити акаунти</h3>
+        <h3>Інструкція для Адміністратора: Безпека акаунтів</h3>
         <button class="btn-close" id="guide-modal-close">✕</button>
       </div>
       <div class="guide-content">
         <div class="guide-step">
-          <h4>1. 🌐 Правильний підбір Проксі (80% безпеки)</h4>
-          <p>Використовуйте <b>Residential (Домашні) або 4G/5G мобільні проксі</b>. Ніколи не використовуйте дешеві DataCenter проксі (AWS/DigitalOcean) — Cloudflare і ChatGPT їх миттєво банять.</p>
+          <h4>1. Підбір Проксі (80% безпеки)</h4>
+          <p>Використовуйте <b>Residential (Домашні) або 4G/5G мобільні проксі</b>. Не використовуйте дешеві DataCenter проксі (AWS/DigitalOcean).</p>
         </div>
         <div class="guide-step">
-          <h4>2. 🛡 Автоматичний захист Fingerprint</h4>
-          <p>Додаток автоматично генерує унікальні апаратні відбитки (Canvas, WebGL, Screen, WebRTC) для кожного профілю. Адміну <b>не потрібно вручну змінювати User-Agent</b>, якщо в цьому немає потреби.</p>
+          <h4>2. Автоматичний захист Fingerprint</h4>
+          <p>Додаток автоматично генерує унікальні апаратні відбитки (Canvas, WebGL, Screen, WebRTC) для кожного профілю.</p>
         </div>
         <div class="guide-step">
-          <h4>3. 🔒 Захист доступу працівників (RBAC)</h4>
-          <p>Користувачі з роллю <b>Worker</b> не мають кнопок редагування чи створення профілів і не бачать чужих акаунтів. Змінювати доступ можна у файлі <code>users.json</code>.</p>
+          <h4>3. Захист доступу працівників (RBAC)</h4>
+          <p>Користувачі з роллю <b>Worker</b> бачать лише дозволені адміністратором профілі.</p>
         </div>
         <div class="guide-step">
-          <h4>4. ⚡ Автотестування перед запуском</h4>
-          <p>Перед відкриттям браузера кнопка <b>"🔍 Тест"</b> перевіряє життєздатність проксі та доступність сайту, щоб уникнути витоків IP.</p>
+          <h4>4. Тестування перед запуском</h4>
+          <p>Кнопка <b>"Тест"</b> перевіряє життєздатність проксі та доступність сайту перед відкриттям браузера.</p>
         </div>
       </div>
       <div class="modal-actions">
@@ -256,7 +256,7 @@
         <h3>Налаштування Хмарної Синхронізації (Firebase)</h3>
         <button class="btn-close" id="sync-modal-close">✕</button>
       </div>
-      <p class="modal-desc">Введіть повні ключі безкоштовного проекту Firebase Firestore для авто-синхронізації сесій з колегами.</p>
+      <p class="modal-desc">Введіть ключі проекту Firebase Firestore для авто-синхронізації сесій.</p>
       <form id="form-sync-config">
         <div class="form-group">
           <label for="fb-api-key">API Key</label>
@@ -290,18 +290,18 @@
   <div class="modal-overlay" id="modal-backup">
     <div class="modal">
       <div class="modal-header">
-        <h3>📥 Бекап профілів</h3>
+        <h3>Бекап профілів</h3>
         <button class="btn-close" id="backup-modal-close">✕</button>
       </div>
-      <p class="modal-desc">Файл бекапу зашифрований (AES-256-GCM) паролем, який ви вказуєте тут — без нього файл марний, навіть якщо його хтось дістане.</p>
+      <p class="modal-desc">Файл бекапу зашифрований (AES-256-GCM) паролем — без нього файл відкрити неможливо.</p>
       <div class="form-group">
         <label for="backup-password">Пароль шифрування</label>
         <input type="password" id="backup-password" placeholder="Мінімум 6 символів" minlength="6" />
       </div>
       <p id="backup-status-text" class="modal-desc"></p>
       <div class="modal-actions">
-        <button type="button" class="btn btn-secondary" id="btn-import-backup">📤 Імпортувати</button>
-        <button type="button" class="btn btn-primary" id="btn-export-backup">📥 Експортувати всі профілі</button>
+        <button type="button" class="btn btn-secondary" id="btn-import-backup">Імпортувати</button>
+        <button type="button" class="btn btn-primary" id="btn-export-backup">Експортувати всі профілі</button>
       </div>
     </div>
   </div>
@@ -310,13 +310,13 @@
   <div class="modal-overlay" id="modal-users">
     <div class="modal modal-users-box">
       <div class="modal-header">
-        <h3>👥 Управління Користувачами та Правами</h3>
+        <h3>Управління Користувачами та Правами</h3>
         <button class="btn-close" id="users-modal-close">✕</button>
       </div>
-      <p class="modal-desc">Призначте, до яких профілів має доступ кожен співробітник. Співробітники бачитимуть та зможуть відкривати лише ті профілі, які ви відмітите прапорцями.</p>
+      <p class="modal-desc">Призначте доступні профілі для кожного співробітника.</p>
       
       <div class="users-section-title">
-        <span>👥 Команда OASIS</span>
+        <span>Команда OASIS</span>
       </div>
       <div class="users-list-card" id="users-list-container">
         <!-- Populated via app.js -->
@@ -324,7 +324,7 @@
 
       <form id="form-user-edit" class="user-form-card">
         <div class="users-section-title">
-          <span id="user-form-title">➕ Додати нового співробітника</span>
+          <span id="user-form-title">Додати нового співробітника</span>
         </div>
         
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
@@ -335,19 +335,19 @@
           <div class="form-group" style="margin-bottom: 0;">
             <label for="user-role">Роль у системі</label>
             <select id="user-role" style="width: 100%; height: 42px; background: rgba(15,23,42,0.9); border: 1px solid var(--border-color); border-radius: 8px; color: #fff; padding: 0 12px; font-size: 14px; outline: none;">
-              <option value="user">👤 Співробітник (Обмежений доступ)</option>
-              <option value="admin">👑 Адміністратор (Повний доступ)</option>
+              <option value="user">Співробітник (Обмежений доступ)</option>
+              <option value="admin">Адміністратор (Повний доступ)</option>
             </select>
           </div>
         </div>
 
         <div class="form-group" style="margin-bottom: 14px;">
           <label for="user-password">Пароль авторизації</label>
-          <input type="password" id="user-password" placeholder="Введіть новий пароль (мінімум 12 символів; порожньо при редагуванні)" minlength="12" maxlength="256" />
+          <input type="password" id="user-password" placeholder="Введіть новий пароль (мінімум 12 символів)" minlength="12" maxlength="256" />
         </div>
 
         <div class="form-group" style="margin-bottom: 12px;">
-          <label>🔒 Дозволені профілі для запуску:</label>
+          <label>Дозволені профілі для запуску:</label>
           <div class="profile-access-grid" id="user-profiles-checkboxes">
             <!-- Populated via app.js -->
           </div>
@@ -355,7 +355,7 @@
 
         <div class="modal-actions" style="margin-top: 16px;">
           <button type="button" class="btn btn-secondary" id="btn-reset-user-form">Очистити форму</button>
-          <button type="submit" class="btn btn-primary">💾 Зберегти користувача</button>
+          <button type="submit" class="btn btn-primary">Зберегти користувача</button>
         </div>
       </form>
     </div>
@@ -365,11 +365,11 @@
   <div class="modal-overlay" id="modal-health">
     <div class="modal" style="max-width: 520px;">
       <div class="modal-header">
-        <h3>🔍 Двокроковий Тест Відбитку та Проксі</h3>
+        <h3>Тест Відбитку та Проксі</h3>
         <button class="btn-close" id="health-modal-close">✕</button>
       </div>
       <div id="health-report-body" style="padding: 12px 0;">
-        <div style="text-align:center; padding: 20px;">⏳ Виконується діагностика захищеності профілю...</div>
+        <div style="text-align:center; padding: 20px;">Виконується діагностика профілю...</div>
       </div>
       <div class="modal-actions">
         <button type="button" class="btn btn-primary" id="health-modal-ok">Зрозуміло</button>
@@ -381,10 +381,10 @@
   <div class="modal-overlay" id="modal-logs">
     <div class="modal modal-users-box">
       <div class="modal-header">
-        <h3>📜 Журнал Дій Команди (Audit Trail)</h3>
+        <h3>Журнал Дій Команди (Audit Trail)</h3>
         <button class="btn-close" id="logs-modal-close">✕</button>
       </div>
-      <p class="modal-desc">Хронологія дій команди у реальному часі: запуск профілів, оновлення куків, авторизації та зміна налаштувань.</p>
+      <p class="modal-desc">Хронологія дій команди у реальному часі.</p>
       
       <div id="audit-logs-container" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 8px; background: rgba(15,23,42,0.6); border: 1px solid var(--border-color); border-radius: 12px;">
         <!-- Populated via app.js -->
@@ -396,7 +396,7 @@
   <div class="modal-overlay" id="modal-changelog">
     <div class="modal modal-users-box">
       <div class="modal-header">
-        <h3>🆕 Що нового в OASIS Browser</h3>
+        <h3>Що нового в OASIS Browser</h3>
         <button class="btn-close" id="changelog-modal-close">✕</button>
       </div>
       <div id="changelog-container" class="changelog-body" style="max-height: 450px; overflow-y: auto; padding: 8px 4px;">
@@ -412,13 +412,12 @@
   <div class="modal-overlay" id="modal-update">
     <div class="modal modal-md">
       <div class="modal-header">
-        <h3 id="update-modal-title">🔄 Оновлення OASIS Browser</h3>
+        <h3 id="update-modal-title">Оновлення OASIS Browser</h3>
         <button class="btn-close" id="update-modal-close">&times;</button>
       </div>
       <div class="update-modal-body" style="padding: 16px 0; text-align: center;">
-        <div class="update-status-icon" id="update-status-icon" style="font-size: 3rem; margin-bottom: 12px;">🔍</div>
         <h4 class="update-status-title" id="update-status-title" style="margin-bottom: 8px; color: var(--text-main);">Перевірка оновлень...</h4>
-        <p class="update-status-desc" id="update-status-desc" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">З'єднання з серверним маніфестом GitHub Releases...</p>
+        <p class="update-status-desc" id="update-status-desc" style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 16px;">З'єднання з сервером релізів...</p>
         
         <div class="progress-bar-container" id="update-progress-container" style="display: none; height: 10px; background: rgba(255,255,255,0.1); border-radius: 6px; overflow: hidden; margin: 12px 0;">
           <div class="progress-bar-fill" id="update-progress-fill" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); transition: width 0.3s ease;"></div>
@@ -426,7 +425,7 @@
 
         <div class="update-actions" style="display: flex; gap: 10px; justify-content: center; margin-top: 16px;">
           <button class="btn btn-secondary" id="btn-update-cancel">Закрити</button>
-          <button class="btn btn-primary" id="btn-update-now" style="display: none; background: linear-gradient(135deg, #10b981, #059669);">🚀 Перезапустити зараз</button>
+          <button class="btn btn-primary" id="btn-update-now" style="display: none; background: linear-gradient(135deg, #10b981, #059669);">Перезапустити зараз</button>
         </div>
       </div>
     </div>

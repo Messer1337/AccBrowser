@@ -291,11 +291,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const proxyText = p.proxy && p.proxy.trim() !== '' ? p.proxy : 'Без проксі (Direct)';
 
-      let activeStatusBadge = '⚪ Закритий';
+      let activeStatusBadge = 'Закритий';
       if (p.isRunning) {
-        activeStatusBadge = '🟢 Відкрито локально';
+        activeStatusBadge = 'Відкрито локально';
       } else if (p.activeHolder && p.activeHolder.username) {
-        activeStatusBadge = `🟡 Зайнято (${escapeHtml(p.activeHolder.username)})`;
+        activeStatusBadge = `Зайнято (${escapeHtml(p.activeHolder.username)})`;
       }
 
       // Proxy Health Cache Badge
@@ -303,15 +303,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       const health = proxyHealthCache[p.id];
       if (health) {
         if (health.ok) {
-          const pingStr = health.pingMs ? `${health.pingMs}ms` : 'ОК';
-          proxyHealthHTML = `<div style="font-size:11px; margin-top:4px; color:#10b981;">🟢 <b>${pingStr}</b> ${health.country ? `(${escapeHtml(health.country)})` : ''}</div>`;
+          const pingStr = health.pingMs ? `${health.pingMs} ms` : 'ОК';
+          proxyHealthHTML = `<div style="font-size:11px; margin-top:4px; color:#10b981;"><b>Онлайн: ${pingStr}</b> ${health.country ? `(${escapeHtml(health.country)})` : ''}</div>`;
         } else {
-          proxyHealthHTML = `<div style="font-size:11px; margin-top:4px; color:#ef4444;">🔴 <b>Офлайн</b> (${escapeHtml(health.error || 'Недоступний')})</div>`;
+          proxyHealthHTML = `<div style="font-size:11px; margin-top:4px; color:#ef4444;"><b>Офлайн</b> (${escapeHtml(health.error || 'Недоступний')})</div>`;
         }
       }
 
       const folderBadgeHTML = p.folder && p.folder.trim() !== '' ? `
-        <span style="font-size:11px; padding:2px 8px; background:rgba(99,102,241,0.2); color:#818cf8; border:1px solid rgba(99,102,241,0.3); border-radius:12px; margin-bottom:6px; display:inline-block;">📁 ${escapeHtml(p.folder)}</span>
+        <span style="font-size:11px; padding:2px 8px; background:rgba(99,102,241,0.2); color:#818cf8; border:1px solid rgba(99,102,241,0.3); border-radius:12px; margin-bottom:6px; display:inline-block;">Папка: ${escapeHtml(p.folder)}</span>
       ` : '';
 
       const tagsHTML = Array.isArray(p.tags) && p.tags.length > 0 ? `
@@ -321,15 +321,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       ` : '';
 
       const adminButtonsHTML = isAdmin ? `
-        <button class="btn btn-secondary btn-icon btn-edit" data-id="${p.id}" title="Редагувати">✏️</button>
+        <button class="btn btn-secondary btn-icon btn-edit" data-id="${p.id}" title="Редагувати">Редагувати</button>
       ` : '';
 
       const deleteButtonHTML = isAdmin ? `
-        <button class="btn btn-secondary btn-icon btn-delete" data-id="${p.id}" title="Видалити">🗑</button>
+        <button class="btn btn-secondary btn-icon btn-delete" data-id="${p.id}" title="Видалити">Видалити</button>
       ` : '';
 
       const rotateButtonHTML = p.proxyRotateUrl && p.proxyRotateUrl.trim() !== '' ? `
-        <button class="btn btn-secondary btn-icon btn-rotate" data-id="${p.id}" title="Оновити IP (Ротація мобільного проксі)">🔄</button>
+        <button class="btn btn-secondary btn-icon btn-rotate" data-id="${p.id}" title="Оновити IP (Ротація мобільного проксі)">Ротація IP</button>
       ` : '';
 
       card.innerHTML = `
@@ -342,17 +342,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           <div class="profile-title">${escapeHtml(p.name)}</div>
           <div class="profile-url">${escapeHtml(p.url)}</div>
           <div class="proxy-info">
-            <span>🌐</span> ${escapeHtml(proxyText)}
+            <span>Проксі:</span> ${escapeHtml(proxyText)}
             ${proxyHealthHTML}
           </div>
           ${tagsHTML}
         </div>
         <div class="card-actions">
-          <button class="btn btn-secondary btn-icon btn-test" data-id="${p.id}" title="Автотест підключення">🔍</button>
+          <button class="btn btn-secondary btn-icon btn-test" data-id="${p.id}" title="Автотест підключення">Тест</button>
           ${rotateButtonHTML}
-          <button class="btn btn-secondary btn-icon btn-warmup" data-id="${p.id}" title="Авто-прогрів акаунта (набір куків & trust score)">🔥</button>
+          <button class="btn btn-secondary btn-icon btn-warmup" data-id="${p.id}" title="Авто-прогрів акаунта">Прогрів</button>
           <button class="btn btn-primary btn-launch" data-id="${p.id}">
-            ${p.isRunning ? 'Відкрито' : '▶ Запустити'}
+            ${p.isRunning ? 'Відкрито' : 'Запустити'}
           </button>
           ${deleteButtonHTML}
         </div>
@@ -372,17 +372,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           const id = e.target.getAttribute('data-id');
           btn.disabled = true;
           const origText = btn.textContent;
-          btn.textContent = '⏳';
+          btn.textContent = '...';
           try {
             const result = await window.api.rotateProxyIp(id);
             if (result.ok) {
-              alert(`✅ ${result.message}`);
+              alert(result.message);
               loadProfiles();
             } else {
-              alert(`❌ Помилка ротації IP: ${result.error}`);
+              alert(`Помилка ротації IP: ${result.error}`);
             }
           } catch (err) {
-            alert('❌ [ПОМИЛКА РОТАЦІЇ IP]: ' + err.message);
+            alert('[Помилка ротації IP]: ' + err.message);
           } finally {
             btn.disabled = false;
             btn.textContent = origText;
@@ -397,7 +397,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const id = e.target.getAttribute('data-id');
           btn.disabled = true;
           const origText = btn.textContent;
-          btn.textContent = '⏳';
+          btn.textContent = '...';
           try {
             const report = await window.api.runFullHealthCheck(id);
             modalHealth.classList.add('active');
@@ -405,7 +405,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const scoreColor = report.score >= 85 ? '#10B981' : (report.score >= 60 ? '#F59E0B' : '#EF4444');
             const warningsHtml = report.warnings && report.warnings.length > 0
               ? report.warnings.map(w => `<div style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:6px; padding:8px 10px; font-size:12px; margin-top:6px; color:#fca5a5;">${escapeHtml(w)}</div>`).join('')
-              : '<div style="background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); border-radius:6px; padding:8px 10px; font-size:12px; margin-top:6px; color:#6ee7b7;">✅ Захист відбитків та мережевий тунель ідеальні (0 зауважень).</div>';
+              : '<div style="background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); border-radius:6px; padding:8px 10px; font-size:12px; margin-top:6px; color:#6ee7b7;">Захист відбитків та мережевий тунель ідеальні (0 зауважень).</div>';
 
             healthReportBody.innerHTML = `
               <div style="text-align:center; margin-bottom:16px;">
@@ -413,10 +413,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <div style="font-size:12px; color:var(--text-muted); margin-top:4px;">Trust Score: ${report.score}/100</div>
               </div>
               <div style="background:rgba(15,23,42,0.8); border:1px solid var(--border-color); border-radius:8px; padding:12px; font-size:13px; display:flex; flex-direction:column; gap:8px;">
-                <div>🌐 <b>Проксі IP:</b> <code>${escapeHtml(report.proxyIp)}</code></div>
-                <div>📍 <b>Геолокація:</b> ${escapeHtml(report.country)}</div>
-                <div>🕓 <b>Часовий пояс:</b> <code>${escapeHtml(report.profileTimezone)}</code> ${report.timezoneMatch ? '✅' : '⚠️'}</div>
-                <div>🛡 <b>WebRTC Leak Shield:</b> ${report.webrtcShield ? '🟢 Активовано (Захищено від витоку IP)' : '🔴 Вимкнено'}</div>
+                <div><b>Проксі IP:</b> <code>${escapeHtml(report.proxyIp)}</code></div>
+                <div><b>Геолокація:</b> ${escapeHtml(report.country)}</div>
+                <div><b>Часовий пояс:</b> <code>${escapeHtml(report.profileTimezone)}</code> ${report.timezoneMatch ? '[ОК]' : '[Помилка]'}</div>
+                <div><b>WebRTC Leak Shield:</b> ${report.webrtcShield ? 'Активовано (Захищено від витоку IP)' : 'Вимкнено'}</div>
               </div>
               <div style="margin-top:14px;">
                 <b style="font-size:12px; text-transform:uppercase; color:var(--text-muted);">Результати діагностики:</b>
@@ -424,7 +424,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               </div>
             `;
           } catch (err) {
-            alert('❌ [ПОМИЛКА ДІАГНОСТИКИ]: ' + err.message);
+            alert('[Помилка діагностики]: ' + err.message);
           } finally {
             btn.disabled = false;
             btn.textContent = origText;
@@ -437,17 +437,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         btn.addEventListener('click', async (e) => {
           const id = e.target.getAttribute('data-id');
           btn.disabled = true;
-          btn.textContent = '⏳';
+          btn.textContent = '...';
           try {
-            alert('🔥 Розпочато авто-прогрів! Браузер послідовно відвідає Google, YouTube, Reddit та Wikipedia для створення реальної історії та куків.');
+            alert('Розпочато авто-прогрів! Браузер послідовно відвідає Google, YouTube, Reddit та Wikipedia для створення реальної історії та куків.');
             await window.api.warmupProfile(id);
-            alert('✅ Прогрів успішно завершено! Набрано реальні кукі та піднято Trust Score.');
+            alert('Прогрів успішно завершено! Набрано реальні кукі та піднято Trust Score.');
             loadProfiles();
           } catch (err) {
-            alert('❌ Помилка прогріву: ' + err.message);
+            alert('Помилка прогріву: ' + err.message);
           } finally {
             btn.disabled = false;
-            btn.textContent = '🔥';
+            btn.textContent = 'Прогрів';
           }
         });
       });
@@ -456,10 +456,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.querySelectorAll('.btn-launch').forEach(btn => {
         btn.addEventListener('click', async (e) => {
           const id = e.target.getAttribute('data-id');
-          const profile = profiles.find(p => p.id === id);
+          const profile = allProfilesList.find(p => p.id === id);
 
           if (profile && profile.activeHolder && profile.activeHolder.username && !profile.isRunning) {
-            const confirmLaunch = confirm(`⚠️ ПОПЕРЕДЖЕННЯ: Цей акаунт зараз відкритий у колеги '${profile.activeHolder.username}'.\n\nВи впевнені, що хочете відкрити його паралельно?`);
+            const confirmLaunch = confirm(`ПОПЕРЕДЖЕННЯ: Цей акаунт зараз відкритий у колеги '${profile.activeHolder.username}'.\n\nВи впевнені, що хочете відкрити його паралельно?`);
             if (!confirmLaunch) return;
           }
 
@@ -469,7 +469,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             await window.api.launchProfile(id);
             setTimeout(loadProfiles, 1500);
           } catch (err) {
-            alert('⚠️ Запуск відхилено: ' + err.message);
+            alert('Запуск відхилено: ' + err.message);
             loadProfiles();
           }
         });
@@ -522,21 +522,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (btnCheckAllProxies) {
     btnCheckAllProxies.addEventListener('click', async () => {
       btnCheckAllProxies.disabled = true;
-      btnCheckAllProxies.textContent = '⏳...';
+      btnCheckAllProxies.textContent = '...';
       try {
         const report = await window.api.checkAllProxies();
         if (report.ok) {
           Object.assign(proxyHealthCache, report.results);
           renderProfilesList();
-          alert(`⚡ ${report.message}`);
+          alert(report.message);
         } else {
-          alert(`❌ Помилка перевірки проксі: ${report.error}`);
+          alert(`Помилка перевірки проксі: ${report.error}`);
         }
       } catch (err) {
-        alert('❌ [ПОМИЛКА ДІАГНОСТИКИ ПРОКСІ]: ' + err.message);
+        alert('[Помилка діагностики проксі]: ' + err.message);
       } finally {
         btnCheckAllProxies.disabled = false;
-        btnCheckAllProxies.textContent = '⚡ Перевірити проксі';
+        btnCheckAllProxies.textContent = 'Перевірити проксі';
       }
     });
   }
@@ -766,8 +766,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 </div>
               </div>
               <div class="user-item-actions">
-                <button class="btn-icon-action btn-edit-user" data-user="${escapeHtml(u.username)}">✏️ Редагувати</button>
-                ${u.username !== 'admin' ? `<button class="btn-icon-action danger btn-delete-user" data-user="${escapeHtml(u.username)}">🗑️ Видалити</button>` : ''}
+                <button class="btn-icon-action btn-edit-user" data-user="${escapeHtml(u.username)}">Редагувати</button>
+                ${u.username !== 'admin' ? `<button class="btn-icon-action danger btn-delete-user" data-user="${escapeHtml(u.username)}">Видалити</button>` : ''}
               </div>
             </div>
           `;
@@ -779,7 +779,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const username = e.target.closest('.btn-edit-user').getAttribute('data-user');
           const target = users.find(u => u.username === username);
           if (target) {
-            userFormTitle.textContent = `✏️ Редагувати користувача: ${target.username}`;
+            userFormTitle.textContent = `Редагувати користувача: ${target.username}`;
             document.getElementById('user-username').value = target.username;
             document.getElementById('user-username').disabled = true;
             document.getElementById('user-password').value = '';
@@ -801,7 +801,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               await window.api.deleteUser(username);
               loadUsersManagement();
             } catch (err) {
-              alert('❌ Помилка: ' + err.message);
+              alert('Помилка: ' + err.message);
             }
           }
         });
@@ -833,11 +833,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       try {
         await window.api.saveUser(userData);
-        alert(`✅ Права для '${username}' збережено!`);
+        alert(`Права для '${username}' збережено!`);
         resetUserForm();
         loadUsersManagement();
       } catch (err) {
-        alert('❌ Помилка збереження користувача: ' + err.message);
+        alert('Помилка збереження користувача: ' + err.message);
       }
     });
   }
